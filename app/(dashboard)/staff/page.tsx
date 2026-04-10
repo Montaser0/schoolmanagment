@@ -76,7 +76,7 @@ export default async function StaffPage() {
         </div>
 
         <div className="w-full lg:w-1/3 flex flex-col gap-8 shrink-0">
-          <div className="rounded-xl border border-dashed border-muted-foreground/30 bg-muted/20 p-6 text-center text-sm text-muted-foreground">
+          <div className="rounded-xl bg-muted/20 p-4 text-center text-sm text-muted-foreground sm:p-5">
             <EventCalender />
           </div>
           <div className="rounded-xl border border-dashed border-muted-foreground/30 bg-muted/20 p-6 text-center text-sm text-muted-foreground">

@@ -3,7 +3,7 @@
 import { useState } from "react";
 import dynamic from "next/dynamic";
 import "react-calendar/dist/Calendar.css";
-import Image from "next/image";
+import styles from "./EventCalender.module.css";
 import type { CalendarProps } from "react-calendar";
 import type { ComponentType } from "react";
 
@@ -43,9 +43,14 @@ const EventCalender = () => {
   const [value, onChange] = useState<Value>(new Date());
 
   return (
-    <div className="bg-white gap-4 p-3">
-      <Calendar onChange={onChange as CalendarProps["onChange"]} value={value} />
-
+    <div
+      className={`${styles.calendarWrap} w-full bg-white p-4 sm:p-5`}
+    >
+      <Calendar
+        className="!border-0 shadow-none"
+        onChange={onChange as CalendarProps["onChange"]}
+        value={value}
+      />
     </div>
   );
 };

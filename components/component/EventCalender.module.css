@@ -1,0 +1,27 @@
+.calendarWrap :global(.react-calendar) {
+  width: 100%;
+  max-width: 100%;
+  border: none;
+  font-size: 1.125rem;
+  line-height: 1.5;
+}
+
+.calendarWrap :global(.react-calendar__navigation) {
+  height: 3rem;
+  margin-bottom: 0.75rem;
+}
+
+.calendarWrap :global(.react-calendar__navigation button) {
+  min-width: 2.75rem;
+  font-size: 1.125rem;
+}
+
+.calendarWrap :global(.react-calendar__month-view__weekdays) {
+  font-size: 0.95rem;
+}
+
+.calendarWrap :global(.react-calendar__tile) {
+  padding: 0.85em 0.45em;
+  min-height: 3.25rem;
+  font-size: 1rem;
+}
