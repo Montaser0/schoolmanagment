@@ -9,7 +9,7 @@ export type ExpenseType = "salary" | "general";
 
 type ActionResult =
   | { success: true; message: string }
-  | { success: false; message: string };
+  | { success: false; message: string; code?: "INSUFFICIENT_FUNDS" };
 
 type AuthContext =
   | { ok: true; userId: string; schoolId: string }
@@ -31,6 +31,11 @@ export type CreateExpenseInput = {
   expenseDate?: string;
   /** افتراضي: general (العمود مطلوب في قاعدة البيانات) */
   type?: ExpenseType;
+  /**
+   * عندما يتجاوز المبلغ الرصيد المتاح (إجمالي الوارد − المصروفات)، يجب التأكيد
+   * إن كان المصروف من مال شخصي للمدير أو خارج صندوق المدرسة.
+   */
+  confirmPersonalFunds?: boolean;
 };
 
 export type UpdateExpenseInput = {
@@ -39,6 +44,7 @@ export type UpdateExpenseInput = {
   amount?: number;
   type?: ExpenseType;
   expenseDate?: string;
+  confirmPersonalFunds?: boolean;
 };
 
 export type DeleteExpenseInput = {
@@ -78,6 +84,22 @@ export type ListExpensesResult =
 export type TotalExpensesResult =
   | { success: true; total: number }
   | { success: false; total: 0; message: string };
+
+export type FinancialSummaryResult =
+  | {
+      success: true;
+      /** إجمالي الإيرادات: دفعات الطلاب (payments) + إيرادات مسجّلة في جدول revenues */
+      totalIncome: number;
+      totalExpenses: number;
+      netProfit: number;
+      paymentsTotal: number;
+      /** إيرادات تُسجَّل يدوياً في صفحة الإيرادات (غير دفعات الطلاب) */
+      additionalRevenuesTotal: number;
+    }
+  | { success: false; message: string };
+
+const INSUFFICIENT_FUNDS_MESSAGE =
+  "المبلغ يتجاوز الرصيد المتاح للمدرسة (إجمالي الإيرادات: دفعات الطلاب + الإيرادات المسجّلة، ناقص المصروفات). إن كان المصروف من مال شخصي للمدير أو خارج الصندوق، فعّل خيار التأكيد ثم أعد المحاولة.";
 
 function normalizeTitle(value: string): string {
   return value.trim();
@@ -134,7 +156,77 @@ async function getAuthContext(): Promise<AuthContext> {
 
 function revalidateExpensesViews() {
   revalidatePath("/staff/expenses");
+  revalidatePath("/staff/revenues");
   revalidatePath("/admin");
+}
+
+function exceedsAvailable(netProfit: number, proposedExpenseAmount: number): boolean {
+  return proposedExpenseAmount > netProfit + 0.005;
+}
+
+function sumAmountRows(rows: { amount?: string | number | null }[] | null): number {
+  let sum = 0;
+  for (const row of rows ?? []) {
+    sum += toNumber(row.amount);
+  }
+  return Number(sum.toFixed(2));
+}
+
+export async function getFinancialSummary(): Promise<FinancialSummaryResult> {
+  const auth = await getAuthContext();
+  if (!auth.ok) {
+    return { success: false, message: auth.message };
+  }
+
+  const supabase = await createClient();
+  const [viewRes, payRes, revRes] = await Promise.all([
+    supabase
+      .from("v_financial_summary")
+      .select("total_income,total_expenses,net_profit")
+      .eq("school_id", auth.schoolId)
+      .maybeSingle(),
+    supabase.from("payments").select("amount").eq("school_id", auth.schoolId),
+    supabase.from("revenues").select("amount").eq("school_id", auth.schoolId),
+  ]);
+
+  if (viewRes.error || !viewRes.data || typeof viewRes.data !== "object") {
+    return {
+      success: false,
+      message: viewRes.error?.message ?? "فشل جلب الملخص المالي.",
+    };
+  }
+
+  if (payRes.error) {
+    return {
+      success: false,
+      message: payRes.error.message ?? "فشل جلب دفعات الطلاب.",
+    };
+  }
+
+  if (revRes.error) {
+    return {
+      success: false,
+      message: revRes.error.message ?? "فشل جلب الإيرادات المسجّلة.",
+    };
+  }
+
+  const row = viewRes.data as {
+    total_income?: string | number | null;
+    total_expenses?: string | number | null;
+    net_profit?: string | number | null;
+  };
+
+  const paymentsTotal = sumAmountRows(payRes.data as { amount?: string | number | null }[]);
+  const additionalRevenuesTotal = sumAmountRows(revRes.data as { amount?: string | number | null }[]);
+
+  return {
+    success: true,
+    totalIncome: toNumber(row.total_income),
+    totalExpenses: toNumber(row.total_expenses),
+    netProfit: toNumber(row.net_profit),
+    paymentsTotal,
+    additionalRevenuesTotal,
+  };
 }
 
 function mapRow(row: ExpenseRow): ExpenseListItem {
@@ -252,6 +344,11 @@ export async function createExpense(input: CreateExpenseInput): Promise<ActionRe
   const auth = await getAuthContext();
   if (!auth.ok) return { success: false, message: auth.message };
 
+  const summary = await getFinancialSummary();
+  if (summary.success && exceedsAvailable(summary.netProfit, amount) && !input.confirmPersonalFunds) {
+    return { success: false, message: INSUFFICIENT_FUNDS_MESSAGE, code: "INSUFFICIENT_FUNDS" };
+  }
+
   const supabase = await createClient();
   const { error } = await supabase.from("expenses").insert({
     school_id: auth.schoolId,
@@ -311,6 +408,31 @@ export async function updateExpense(input: UpdateExpenseInput): Promise<ActionRe
   if (!auth.ok) return { success: false, message: auth.message };
 
   const supabase = await createClient();
+
+  if (input.amount !== undefined) {
+    const { data: existing, error: fetchError } = await supabase
+      .from("expenses")
+      .select("amount")
+      .eq("id", id)
+      .eq("school_id", auth.schoolId)
+      .maybeSingle();
+
+    if (fetchError || !existing) {
+      return { success: false, message: fetchError?.message ?? "تعذر التحقق من المصروف الحالي." };
+    }
+
+    const oldAmount = toNumber((existing as { amount?: string | number | null }).amount);
+    const newAmount = toStrictlyPositiveAmount(input.amount);
+    const summary = await getFinancialSummary();
+    if (
+      summary.success &&
+      exceedsAvailable(summary.netProfit + oldAmount, newAmount) &&
+      !input.confirmPersonalFunds
+    ) {
+      return { success: false, message: INSUFFICIENT_FUNDS_MESSAGE, code: "INSUFFICIENT_FUNDS" };
+    }
+  }
+
   const { error } = await supabase
     .from("expenses")
     .update(updates)

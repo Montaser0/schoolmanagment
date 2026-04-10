@@ -151,6 +151,17 @@ create table if not exists public.expenses (
   unique (id, school_id)
 );
 
+-- 11) إيرادات إضافية (غير دفعات الطلاب): تبرعات، دعم، إيجار قاعات، إلخ
+create table if not exists public.revenues (
+  id uuid primary key default gen_random_uuid(),
+  school_id uuid not null references public.schools(id) on delete cascade,
+  title text not null,
+  amount numeric(12,2) not null check (amount > 0),
+  revenue_date date not null default current_date,
+  created_at timestamptz not null default now(),
+  unique (id, school_id)
+);
+
 -- =========================================================
 -- 3) CROSS-TENANT SAFETY (STRICT SCHOOL CONSISTENCY)
 -- =========================================================
@@ -207,6 +218,7 @@ create index if not exists idx_payments_student on public.payments(student_id);
 create index if not exists idx_st_att_school_date on public.student_attendance(school_id, attendance_date);
 create index if not exists idx_tc_att_school_date on public.teacher_attendance(school_id, attendance_date);
 create index if not exists idx_expenses_school_date on public.expenses(school_id, expense_date);
+create index if not exists idx_revenues_school_date on public.revenues(school_id, revenue_date);
 
 -- =========================================================
 -- 5) HELPER FUNCTIONS (RLS)
@@ -254,6 +266,7 @@ alter table public.payments enable row level security;
 alter table public.student_attendance enable row level security;
 alter table public.teacher_attendance enable row level security;
 alter table public.expenses enable row level security;
+alter table public.revenues enable row level security;
 
 -- schools
 drop policy if exists schools_select_policy on public.schools;
@@ -339,6 +352,12 @@ with check (school_id = public.current_user_school_id());
 -- expenses
 drop policy if exists expenses_all_tenant_policy on public.expenses;
 create policy expenses_all_tenant_policy on public.expenses
+for all using (school_id = public.current_user_school_id())
+with check (school_id = public.current_user_school_id());
+
+-- revenues
+drop policy if exists revenues_all_tenant_policy on public.revenues;
+create policy revenues_all_tenant_policy on public.revenues
 for all using (school_id = public.current_user_school_id())
 with check (school_id = public.current_user_school_id());
 
@@ -429,17 +448,20 @@ where vis.payment_status = 'late'
   and s.status = 'active';
 
 -- ملخص الداشبورد المالي
+-- total_income = إيرادات المدرسة: دفعات الطلاب (payments) + إيرادات إضافية مسجّلة (revenues)
 create or replace view public.v_financial_summary as
 select
   s.id as school_id,
-  coalesce((
-    select sum(p.amount) from public.payments p where p.school_id = s.id
-  ), 0)::numeric(12,2) as total_income,
+  (
+    coalesce((select sum(p.amount) from public.payments p where p.school_id = s.id), 0)
+    + coalesce((select sum(r.amount) from public.revenues r where r.school_id = s.id), 0)
+  )::numeric(12,2) as total_income,
   coalesce((
     select sum(e.amount) from public.expenses e where e.school_id = s.id
   ), 0)::numeric(12,2) as total_expenses,
   (
     coalesce((select sum(p.amount) from public.payments p where p.school_id = s.id), 0)
+    + coalesce((select sum(r.amount) from public.revenues r where r.school_id = s.id), 0)
     - coalesce((select sum(e.amount) from public.expenses e where e.school_id = s.id), 0)
   )::numeric(12,2) as net_profit
 from public.schools s;
@@ -549,5 +571,50 @@ $$;
 
 -- 3) Recreate users index used by school-scoped lookups.
 create index if not exists idx_users_school on public.users(school_id);
+
+commit;
+-- إضافة جدول الإيرادات + فهرس + RLS + تحديث ملخص مالي
+-- يتطلب وجود extension pgcrypto (عادة مفعّل في Supabase)
+create extension if not exists "pgcrypto";
+
+begin;
+
+create table if not exists public.revenues (
+  id uuid primary key default gen_random_uuid(),
+  school_id uuid not null references public.schools(id) on delete cascade,
+  title text not null,
+  amount numeric(12,2) not null check (amount > 0),
+  revenue_date date not null default current_date,
+  created_at timestamptz not null default now(),
+  unique (id, school_id)
+);
+
+create index if not exists idx_revenues_school_date
+  on public.revenues(school_id, revenue_date);
+
+alter table public.revenues enable row level security;
+
+drop policy if exists revenues_all_tenant_policy on public.revenues;
+create policy revenues_all_tenant_policy on public.revenues
+for all
+using (school_id = public.current_user_school_id())
+with check (school_id = public.current_user_school_id());
+
+create or replace view public.v_financial_summary as
+select
+  s.id as school_id,
+  (
+    coalesce((select sum(p.amount) from public.payments p where p.school_id = s.id), 0)
+    + coalesce((select sum(r.amount) from public.revenues r where r.school_id = s.id), 0)
+  )::numeric(12,2) as total_income,
+  coalesce((
+    select sum(e.amount) from public.expenses e where e.school_id = s.id
+  ), 0)::numeric(12,2) as total_expenses,
+  (
+    coalesce((select sum(p.amount) from public.payments p where p.school_id = s.id), 0)
+    + coalesce((select sum(r.amount) from public.revenues r where r.school_id = s.id), 0)
+    - coalesce((select sum(e.amount) from public.expenses e where e.school_id = s.id), 0)
+  )::numeric(12,2) as net_profit
+from public.schools s;
 
 commit;

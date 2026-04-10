@@ -1,17 +1,17 @@
+import { getFinancialSummary } from "@/actions/expenses";
 import {
-  createExpense,
-  deleteExpense,
-  getFinancialSummary,
-  getTotalExpensesAmount,
-  listExpenses,
-  updateExpense,
-} from "@/actions/expenses";
+  createRevenue,
+  deleteRevenue,
+  getTotalRevenuesAmount,
+  listRevenues,
+  updateRevenue,
+} from "@/actions/revenues";
 import { resolveSchoolId } from "@/lib/auth/resolve-school-id";
 import { createClient } from "@/lib/supabase/server";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 
-type ExpensesPageProps = {
+type RevenuesPageProps = {
   searchParams?: Promise<{
     status?: string;
     message?: string;
@@ -32,7 +32,7 @@ function buildRedirectUrl(
       if (v) q.set(k, v);
     }
   }
-  return `/staff/expenses?${q.toString()}`;
+  return `/staff/revenues?${q.toString()}`;
 }
 
 function asNullableText(value: FormDataEntryValue | null): string | null {
@@ -48,19 +48,14 @@ function asPositiveNumber(value: FormDataEntryValue | null): number | undefined 
   return number;
 }
 
-function formDataConfirmPersonalFunds(formData: FormData): boolean {
-  const v = formData.get("confirmPersonalFunds");
-  return v === "on" || v === "true" || v === "1";
-}
-
-type ExpenseEditRow = {
+type RevenueEditRow = {
   id: string;
   title: string;
   amount: number;
-  expense_date: string;
+  revenue_date: string;
 };
 
-export default async function StaffExpensesPage({ searchParams }: ExpensesPageProps) {
+export default async function StaffRevenuesPage({ searchParams }: RevenuesPageProps) {
   const params = (await searchParams) ?? {};
   const pageStatus = params.status;
   const pageMessage = params.message;
@@ -84,18 +79,18 @@ export default async function StaffExpensesPage({ searchParams }: ExpensesPagePr
   }
 
   const [listResult, totalResult, summaryResult] = await Promise.all([
-    listExpenses(),
-    getTotalExpensesAmount(),
+    listRevenues(),
+    getTotalRevenuesAmount(),
     getFinancialSummary(),
   ]);
 
-  const expenses = listResult.success ? listResult.expenses : [];
+  const revenues = listResult.success ? listResult.revenues : [];
 
-  let editing: ExpenseEditRow | undefined;
+  let editing: RevenueEditRow | undefined;
   if (editId) {
     const { data: row } = await supabase
-      .from("expenses")
-      .select("id,title,amount,expense_date")
+      .from("revenues")
+      .select("id,title,amount,revenue_date")
       .eq("id", editId)
       .eq("school_id", schoolId)
       .maybeSingle();
@@ -106,41 +101,40 @@ export default async function StaffExpensesPage({ searchParams }: ExpensesPagePr
         id: row.id,
         title: row.title,
         amount: Number.isFinite(amount) ? amount : 0,
-        expense_date: row.expense_date,
+        revenue_date: row.revenue_date,
       };
     }
   }
 
-  async function createExpenseAction(formData: FormData) {
+  async function createRevenueAction(formData: FormData) {
     "use server";
     const title = String(formData.get("title") ?? "").trim();
     const amount = asPositiveNumber(formData.get("amount"));
-    const expenseDate = asNullableText(formData.get("expenseDate"));
+    const revenueDate = asNullableText(formData.get("revenueDate"));
 
     if (amount === undefined) {
       redirect(buildRedirectUrl("error", "أدخل مبلغًا صالحًا."));
       return;
     }
 
-    const result = await createExpense({
+    const result = await createRevenue({
       title,
       amount,
-      expenseDate: expenseDate ?? undefined,
-      confirmPersonalFunds: formDataConfirmPersonalFunds(formData),
+      revenueDate: revenueDate ?? undefined,
     });
 
     redirect(buildRedirectUrl(result.success ? "success" : "error", result.message));
   }
 
-  async function updateExpenseAction(formData: FormData) {
+  async function updateRevenueAction(formData: FormData) {
     "use server";
     const id = String(formData.get("id") ?? "").trim();
     const title = String(formData.get("title") ?? "").trim();
     const amount = asPositiveNumber(formData.get("amount"));
-    const expenseDate = asNullableText(formData.get("expenseDate"));
+    const revenueDate = asNullableText(formData.get("revenueDate"));
 
     if (!id) {
-      redirect(buildRedirectUrl("error", "معرّف المصروف مفقود."));
+      redirect(buildRedirectUrl("error", "معرّف الإيراد مفقود."));
       return;
     }
     if (amount === undefined) {
@@ -152,12 +146,11 @@ export default async function StaffExpensesPage({ searchParams }: ExpensesPagePr
       return;
     }
 
-    const result = await updateExpense({
+    const result = await updateRevenue({
       id,
       title,
       amount,
-      expenseDate: expenseDate ?? undefined,
-      confirmPersonalFunds: formDataConfirmPersonalFunds(formData),
+      revenueDate: revenueDate ?? undefined,
     });
 
     redirect(
@@ -167,22 +160,23 @@ export default async function StaffExpensesPage({ searchParams }: ExpensesPagePr
     );
   }
 
-  async function deleteExpenseAction(formData: FormData) {
+  async function deleteRevenueAction(formData: FormData) {
     "use server";
     const id = String(formData.get("id") ?? "").trim();
-    const result = await deleteExpense({ id });
+    const result = await deleteRevenue({ id });
     redirect(buildRedirectUrl(result.success ? "success" : "error", result.message));
   }
 
-  const totalDisplay = totalResult.success
-    ? totalResult.total.toLocaleString("ar-EG")
-    : null;
+  const totalDisplay = totalResult.success ? totalResult.total.toLocaleString("ar-EG") : null;
 
   return (
     <div className="w-full max-w-6xl space-y-6" dir="rtl">
       <div className="space-y-2">
-        <h1 className="text-2xl font-bold">المصاريف</h1>
-        <p className="text-sm text-muted-foreground">تسجيل ومتابعة مصاريف المدرسة.</p>
+        <h1 className="text-2xl font-bold">الإيرادات</h1>
+        <p className="text-sm text-muted-foreground">
+          دفعات الطلاب تُعدّ من إيرادات المدرسة وتُحسب تلقائياً من سجل الدفعات. هنا تسجّل إيرادات إضافية
+          (تبرعات، دعم، إيجار، …) تُجمع مع دفعات الطلاب في الملخص المالي وصفحة المصاريف.
+        </p>
       </div>
 
       {pageMessage ? (
@@ -203,46 +197,51 @@ export default async function StaffExpensesPage({ searchParams }: ExpensesPagePr
         </div>
       ) : null}
 
-      <div className="grid gap-4 sm:grid-cols-2">
-        <div className="rounded-lg border bg-card p-5 shadow-sm">
-          <p className="text-sm font-medium text-muted-foreground">إجمالي المصروفات</p>
-          {totalResult.success ? (
-            <p className="mt-2 text-3xl font-bold tabular-nums">{totalDisplay}</p>
-          ) : (
-            <p className="mt-2 text-sm text-destructive">{totalResult.message}</p>
-          )}
-        </div>
-        <div className="rounded-lg border bg-card p-5 shadow-sm">
-          <p className="text-sm font-medium text-muted-foreground">الرصيد المتاح (بعد المصروفات)</p>
+      <div className="grid gap-4 sm:grid-cols-3">
+        <div className="rounded-lg border bg-card p-5 shadow-sm sm:col-span-3">
+          <p className="text-sm font-medium text-muted-foreground">إجمالي إيرادات المدرسة</p>
           {summaryResult.success ? (
-            <p
-              className={`mt-2 text-3xl font-bold tabular-nums ${
-                summaryResult.netProfit < 0 ? "text-destructive" : ""
-              }`}
-            >
-              {summaryResult.netProfit.toLocaleString("ar-EG")}
+            <p className="mt-2 text-3xl font-bold tabular-nums">
+              {summaryResult.totalIncome.toLocaleString("ar-EG")}
             </p>
           ) : (
             <p className="mt-2 text-sm text-destructive">{summaryResult.message}</p>
           )}
           {summaryResult.success ? (
             <p className="mt-2 text-xs text-muted-foreground leading-relaxed">
-              الإيرادات تشمل دفعات الطلاب (جدول الدفعات) والإيرادات المسجّلة في صفحة الإيرادات؛ الرصيد = تلك
-              الإيرادات ناقص المصروفات. لا يُسمح بتسجيل مصروف يتجاوز الرصيد إلا بعد تأكيد أنه من مال شخصي.
+              مجموع دفعات الطلاب + الإيرادات الإضافية المسجّلة أدناه (كما في الملخص المالي).
             </p>
           ) : null}
+        </div>
+        <div className="rounded-lg border bg-card p-5 shadow-sm">
+          <p className="text-sm font-medium text-muted-foreground">منها: دفعات الطلاب</p>
+          {summaryResult.success ? (
+            <p className="mt-2 text-2xl font-bold tabular-nums">
+              {summaryResult.paymentsTotal.toLocaleString("ar-EG")}
+            </p>
+          ) : (
+            <p className="mt-2 text-sm text-muted-foreground">—</p>
+          )}
+        </div>
+        <div className="rounded-lg border bg-card p-5 shadow-sm sm:col-span-2">
+          <p className="text-sm font-medium text-muted-foreground">منها: إيرادات مسجّلة في هذه الصفحة</p>
+          {totalResult.success ? (
+            <p className="mt-2 text-2xl font-bold tabular-nums">{totalDisplay}</p>
+          ) : (
+            <p className="mt-2 text-sm text-destructive">{totalResult.message}</p>
+          )}
         </div>
       </div>
 
       {editing ? (
         <section className="rounded-lg border border-primary/30 p-5 space-y-4">
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <h2 className="text-lg font-semibold">تعديل مصروف</h2>
-            <Link href="/staff/expenses" className="text-sm text-muted-foreground hover:text-foreground">
+            <h2 className="text-lg font-semibold">تعديل إيراد</h2>
+            <Link href="/staff/revenues" className="text-sm text-muted-foreground hover:text-foreground">
               إلغاء التعديل
             </Link>
           </div>
-          <form action={updateExpenseAction} className="space-y-4">
+          <form action={updateRevenueAction} className="space-y-4">
             <input type="hidden" name="id" value={editing.id} />
             <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
               <div className="space-y-2 md:col-span-2">
@@ -255,7 +254,7 @@ export default async function StaffExpensesPage({ searchParams }: ExpensesPagePr
                   required
                   defaultValue={editing.title}
                   className="w-full rounded-md border bg-background px-3 py-2 text-sm outline-none focus:border-primary"
-                  placeholder="مثال: راتب شهر مارس، شراء مستلزمات…"
+                  placeholder="مثال: تبرع جهة خيرية، إيجار قاعة…"
                 />
               </div>
               <div className="space-y-2">
@@ -274,29 +273,17 @@ export default async function StaffExpensesPage({ searchParams }: ExpensesPagePr
                 />
               </div>
               <div className="space-y-2 md:col-span-2">
-                <label htmlFor="editExpenseDate" className="text-sm font-medium">
-                  تاريخ المصروف
+                <label htmlFor="editRevenueDate" className="text-sm font-medium">
+                  تاريخ الإيراد
                 </label>
                 <input
-                  id="editExpenseDate"
-                  name="expenseDate"
+                  id="editRevenueDate"
+                  name="revenueDate"
                   type="date"
                   required
-                  defaultValue={editing.expense_date.slice(0, 10)}
+                  defaultValue={editing.revenue_date.slice(0, 10)}
                   className="w-full rounded-md border bg-background px-3 py-2 text-sm outline-none focus:border-primary"
                 />
-              </div>
-              <div className="flex items-start gap-2 md:col-span-2">
-                <input
-                  id="editConfirmPersonalFunds"
-                  name="confirmPersonalFunds"
-                  type="checkbox"
-                  value="1"
-                  className="mt-1 h-4 w-4 rounded border"
-                />
-                <label htmlFor="editConfirmPersonalFunds" className="text-sm leading-relaxed text-muted-foreground">
-                  أؤكد أن هذا المصروف من مال شخصي للمدير أو خارج صندوق المدرسة عند تجاوز الرصيد المتاح.
-                </label>
               </div>
             </div>
             <button
@@ -310,8 +297,8 @@ export default async function StaffExpensesPage({ searchParams }: ExpensesPagePr
       ) : null}
 
       <section className="rounded-lg border p-5 space-y-4">
-        <h2 className="text-lg font-semibold">إضافة مصروف</h2>
-        <form action={createExpenseAction} className="space-y-4">
+        <h2 className="text-lg font-semibold">إضافة إيراد</h2>
+        <form action={createRevenueAction} className="space-y-4">
           <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
             <div className="space-y-2 md:col-span-2">
               <label htmlFor="title" className="text-sm font-medium">
@@ -322,7 +309,7 @@ export default async function StaffExpensesPage({ searchParams }: ExpensesPagePr
                 name="title"
                 required
                 className="w-full rounded-md border bg-background px-3 py-2 text-sm outline-none focus:border-primary"
-                placeholder="مثال: راتب معلم، فاتورة كهرباء، صيانة…"
+                placeholder="مثال: تبرع، منحة، بيع مستلزمات…"
               />
             </div>
             <div className="space-y-2">
@@ -340,44 +327,32 @@ export default async function StaffExpensesPage({ searchParams }: ExpensesPagePr
               />
             </div>
             <div className="space-y-2 md:col-span-2">
-              <label htmlFor="expenseDate" className="text-sm font-medium">
-                تاريخ المصروف
+              <label htmlFor="revenueDate" className="text-sm font-medium">
+                تاريخ الإيراد
               </label>
               <input
-                id="expenseDate"
-                name="expenseDate"
+                id="revenueDate"
+                name="revenueDate"
                 type="date"
                 defaultValue={new Date().toISOString().slice(0, 10)}
                 className="w-full rounded-md border bg-background px-3 py-2 text-sm outline-none focus:border-primary"
               />
-            </div>
-            <div className="flex items-start gap-2 md:col-span-2">
-              <input
-                id="confirmPersonalFunds"
-                name="confirmPersonalFunds"
-                type="checkbox"
-                value="1"
-                className="mt-1 h-4 w-4 rounded border"
-              />
-              <label htmlFor="confirmPersonalFunds" className="text-sm leading-relaxed text-muted-foreground">
-                أؤكد أن هذا المصروف من مال شخصي للمدير أو خارج صندوق المدرسة عند تجاوز الرصيد المتاح.
-              </label>
             </div>
           </div>
           <button
             type="submit"
             className="inline-flex items-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:opacity-90"
           >
-            تسجيل المصروف
+            تسجيل الإيراد
           </button>
         </form>
       </section>
 
       <section className="rounded-lg border overflow-hidden">
         <div className="border-b px-5 py-3">
-          <h2 className="text-lg font-semibold">سجل المصاريف</h2>
+          <h2 className="text-lg font-semibold">سجل الإيرادات</h2>
           <p className="text-xs text-muted-foreground mt-1">
-            {listResult.success ? `عدد السجلات المعروضة: ${expenses.length}` : null}
+            {listResult.success ? `عدد السجلات المعروضة: ${revenues.length}` : null}
           </p>
         </div>
         <div className="overflow-x-auto">
@@ -391,27 +366,27 @@ export default async function StaffExpensesPage({ searchParams }: ExpensesPagePr
               </tr>
             </thead>
             <tbody>
-              {expenses.length === 0 ? (
+              {revenues.length === 0 ? (
                 <tr>
                   <td colSpan={4} className="px-4 py-8 text-center text-muted-foreground">
-                    لا توجد مصاريف مسجّلة.
+                    لا توجد إيرادات مسجّلة.
                   </td>
                 </tr>
               ) : (
-                expenses.map((row) => (
+                revenues.map((row) => (
                   <tr key={row.id} className="border-t">
-                    <td className="px-4 py-2 whitespace-nowrap">{row.expenseDate}</td>
+                    <td className="px-4 py-2 whitespace-nowrap">{row.revenueDate}</td>
                     <td className="px-4 py-2">{row.title}</td>
                     <td className="px-4 py-2 tabular-nums">{row.amount.toLocaleString("ar-EG")}</td>
                     <td className="px-4 py-2">
                       <div className="flex flex-wrap gap-2 justify-end">
                         <Link
-                          href={`/staff/expenses?edit=${row.id}`}
+                          href={`/staff/revenues?edit=${row.id}`}
                           className="rounded-md border px-2 py-1 text-xs hover:bg-muted"
                         >
                           تعديل
                         </Link>
-                        <form action={deleteExpenseAction}>
+                        <form action={deleteRevenueAction}>
                           <input type="hidden" name="id" value={row.id} />
                           <button
                             type="submit"
