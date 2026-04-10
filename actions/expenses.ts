@@ -81,6 +81,37 @@ export type ListExpensesResult =
       message: string;
     };
 
+/** سجل المصاريف المعروض: يدوي من `expenses` أو دفعة راتب من `teacher_payments`. */
+export type ExpenseLedgerSource = "manual" | "teacher_salary_payment";
+
+export type ExpenseLedgerItem = {
+  ledgerKey: string;
+  source: ExpenseLedgerSource;
+  id: string;
+  title: string;
+  amount: number;
+  expenseDate: string;
+  createdAt: string;
+  type: ExpenseType;
+  canEdit: boolean;
+};
+
+export type ListExpenseLedgerResult =
+  | {
+      success: true;
+      items: ExpenseLedgerItem[];
+      total: number;
+      hasMore: boolean;
+      message: string;
+    }
+  | {
+      success: false;
+      items: [];
+      total: 0;
+      hasMore: false;
+      message: string;
+    };
+
 export type TotalExpensesResult =
   | { success: true; total: number }
   | { success: false; total: 0; message: string };
@@ -286,6 +317,148 @@ export async function listExpenses(filters?: ListExpensesFilters): Promise<ListE
     expenses: rows.map(mapRow),
     total: count ?? rows.length,
     message: "تم جلب المصاريف.",
+  };
+}
+
+type TeacherPaymentLedgerRow = {
+  id: string;
+  amount: number | string;
+  paid_at: string;
+  teacher_id: string;
+  installment_id: string | null;
+  teachers: { full_name: string } | { full_name: string }[] | null;
+};
+
+/**
+ * سجل مصروفات موحّد: المصروفات اليدوية + دفعات رواتب المعلمين (جدول teacher_payments).
+ * لا يُنشئ صفوفاً في `expenses` حتى لا يُحسب المبلغ مرتين في v_financial_summary.
+ */
+export async function listExpenseLedger(filters?: ListExpensesFilters): Promise<ListExpenseLedgerResult> {
+  const auth = await getAuthContext();
+  if (!auth.ok) {
+    return { success: false, items: [], total: 0, hasMore: false, message: auth.message };
+  }
+
+  const maxEach = 400;
+  const supabase = await createClient();
+  const typeFilter = filters?.type;
+
+  let expQuery = supabase
+    .from("expenses")
+    .select("*")
+    .eq("school_id", auth.schoolId)
+    .order("expense_date", { ascending: false })
+    .order("created_at", { ascending: false })
+    .limit(maxEach);
+
+  if (typeFilter) {
+    expQuery = expQuery.eq("type", typeFilter);
+  }
+  if (filters?.from) {
+    const from = parseDateOnly(filters.from);
+    if (from) expQuery = expQuery.gte("expense_date", from);
+  }
+  if (filters?.to) {
+    const to = parseDateOnly(filters.to);
+    if (to) expQuery = expQuery.lte("expense_date", to);
+  }
+
+  const loadTeacherPayments = typeFilter !== "general";
+
+  let payQuery = supabase
+    .from("teacher_payments")
+    .select(
+      "id,amount,paid_at,teacher_id,installment_id,teachers!teacher_payments_teacher_school_fk(full_name)",
+    )
+    .eq("school_id", auth.schoolId)
+    .order("paid_at", { ascending: false })
+    .limit(maxEach);
+
+  if (filters?.from) {
+    const from = parseDateOnly(filters.from);
+    if (from) payQuery = payQuery.gte("paid_at", `${from}T00:00:00.000Z`);
+  }
+  if (filters?.to) {
+    const to = parseDateOnly(filters.to);
+    if (to) payQuery = payQuery.lte("paid_at", `${to}T23:59:59.999Z`);
+  }
+
+  const [expRes, payRes] = await Promise.all([
+    expQuery,
+    loadTeacherPayments ? payQuery : Promise.resolve({ data: [] as TeacherPaymentLedgerRow[], error: null }),
+  ]);
+
+  if (expRes.error) {
+    return {
+      success: false,
+      items: [],
+      total: 0,
+      hasMore: false,
+      message: expRes.error.message ?? "فشل جلب المصاريف اليدوية.",
+    };
+  }
+
+  const manualItems: ExpenseLedgerItem[] = ((expRes.data ?? []) as ExpenseRow[]).map((row) => {
+    const m = mapRow(row);
+    return {
+      ledgerKey: `e-${m.id}`,
+      source: "manual",
+      id: m.id,
+      title: m.title,
+      amount: m.amount,
+      expenseDate: m.expenseDate.slice(0, 10),
+      createdAt: m.createdAt,
+      type: m.type,
+      canEdit: true,
+    };
+  });
+
+  let salaryItems: ExpenseLedgerItem[] = [];
+  if (loadTeacherPayments && payRes.error) {
+    const msg = payRes.error.message?.toLowerCase() ?? "";
+    if (!msg.includes("does not exist") && !msg.includes("schema cache")) {
+      return {
+        success: false,
+        items: [],
+        total: 0,
+        hasMore: false,
+        message: payRes.error.message ?? "فشل جلب دفعات رواتب المعلمين.",
+      };
+    }
+  } else if (loadTeacherPayments) {
+    salaryItems = ((payRes.data ?? []) as TeacherPaymentLedgerRow[]).map((p) => {
+      const t = Array.isArray(p.teachers) ? p.teachers[0] : p.teachers;
+      const name = t?.full_name?.trim() || "معلم";
+      const paidAt = p.paid_at ?? "";
+      return {
+        ledgerKey: `tp-${p.id}`,
+        source: "teacher_salary_payment" as const,
+        id: p.id,
+        title: `صرف راتب — ${name}`,
+        amount: toNumber(p.amount),
+        expenseDate: paidAt.slice(0, 10),
+        createdAt: paidAt,
+        type: "salary" as const,
+        canEdit: false,
+      };
+    });
+  }
+
+  const merged = [...manualItems, ...salaryItems].sort((a, b) => {
+    const da = a.expenseDate.localeCompare(b.expenseDate);
+    if (da !== 0) return -da;
+    return b.createdAt.localeCompare(a.createdAt);
+  });
+
+  const cap = Math.min(Math.max(filters?.limit ?? 250, 1), 500);
+  const sliced = merged.slice(0, cap);
+
+  return {
+    success: true,
+    items: sliced,
+    total: merged.length,
+    hasMore: merged.length > sliced.length,
+    message: "تم جلب سجل المصاريف.",
   };
 }
 

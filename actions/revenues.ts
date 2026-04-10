@@ -48,6 +48,21 @@ export type RevenueListItem = {
   createdAt: string;
 };
 
+/** سجل الإيرادات المعروض: يدوي من `revenues` أو دفعة قسط من `payments`. */
+export type RevenueLedgerSource = "manual" | "tuition_payment";
+
+export type RevenueLedgerItem = {
+  /** مفتاح فريد للواجهة */
+  ledgerKey: string;
+  source: RevenueLedgerSource;
+  id: string;
+  title: string;
+  amount: number;
+  revenueDate: string;
+  createdAt: string;
+  canEdit: boolean;
+};
+
 export type ListRevenuesFilters = {
   from?: string;
   to?: string;
@@ -65,6 +80,23 @@ export type ListRevenuesResult =
       success: false;
       revenues: [];
       total: 0;
+      message: string;
+    };
+
+export type ListRevenueLedgerResult =
+  | {
+      success: true;
+      items: RevenueLedgerItem[];
+      /** إجمالي السجلات بعد الدمج (قبل اقتطاع العرض). */
+      total: number;
+      hasMore: boolean;
+      message: string;
+    }
+  | {
+      success: false;
+      items: [];
+      total: 0;
+      hasMore: false;
       message: string;
     };
 
@@ -178,6 +210,142 @@ export async function listRevenues(filters?: ListRevenuesFilters): Promise<ListR
     revenues: rows.map(mapRow),
     total: count ?? rows.length,
     message: "تم جلب الإيرادات.",
+  };
+}
+
+type PaymentLedgerRow = {
+  id: string;
+  amount: number | string;
+  paid_at: string;
+  student_id: string;
+  installment_id: string | null;
+  students: { full_name: string } | { full_name: string }[] | null;
+};
+
+/**
+ * سجل إيرادات موحّد: الإيرادات اليدوية + دفعات أقساط الطلاب (جدول payments).
+ * لا يُنشئ صفوفاً في `revenues` حتى لا يُحسب المبلغ مرتين في v_financial_summary.
+ */
+export async function listRevenueLedger(filters?: ListRevenuesFilters): Promise<ListRevenueLedgerResult> {
+  const auth = await getAuthContext();
+  if (!auth.ok) {
+    return { success: false, items: [], total: 0, hasMore: false, message: auth.message };
+  }
+
+  const maxEach = 400;
+  const supabase = await createClient();
+
+  let revQuery = supabase
+    .from("revenues")
+    .select("*")
+    .eq("school_id", auth.schoolId)
+    .order("revenue_date", { ascending: false })
+    .order("created_at", { ascending: false })
+    .limit(maxEach);
+
+  if (filters?.from) {
+    const from = parseDateOnly(filters.from);
+    if (from) revQuery = revQuery.gte("revenue_date", from);
+  }
+  if (filters?.to) {
+    const to = parseDateOnly(filters.to);
+    if (to) revQuery = revQuery.lte("revenue_date", to);
+  }
+
+  let payQuery = supabase
+    .from("payments")
+    .select(
+      "id,amount,paid_at,student_id,installment_id,students!payments_student_school_fk(full_name)",
+    )
+    .eq("school_id", auth.schoolId)
+    .order("paid_at", { ascending: false })
+    .limit(maxEach);
+
+  if (filters?.from) {
+    const from = parseDateOnly(filters.from);
+    if (from) payQuery = payQuery.gte("paid_at", `${from}T00:00:00.000Z`);
+  }
+  if (filters?.to) {
+    const to = parseDateOnly(filters.to);
+    if (to) payQuery = payQuery.lte("paid_at", `${to}T23:59:59.999Z`);
+  }
+
+  const [{ data: revData, error: revError }, { data: payData, error: payError }] = await Promise.all([
+    revQuery,
+    payQuery,
+  ]);
+
+  if (revError) {
+    return {
+      success: false,
+      items: [],
+      total: 0,
+      hasMore: false,
+      message: revError.message ?? "فشل جلب الإيرادات اليدوية.",
+    };
+  }
+
+  const manualItems: RevenueLedgerItem[] = ((revData ?? []) as RevenueRow[]).map((row) => {
+    const m = mapRow(row);
+    return {
+      ledgerKey: `m-${m.id}`,
+      source: "manual",
+      id: m.id,
+      title: m.title,
+      amount: m.amount,
+      revenueDate: m.revenueDate.slice(0, 10),
+      createdAt: m.createdAt,
+      canEdit: true,
+    };
+  });
+
+  let tuitionItems: RevenueLedgerItem[] = [];
+  if (payError) {
+    const msg = payError.message?.toLowerCase() ?? "";
+    if (!msg.includes("does not exist") && !msg.includes("schema cache")) {
+      return {
+        success: false,
+        items: [],
+        total: 0,
+        hasMore: false,
+        message: payError.message ?? "فشل جلب دفعات الطلاب.",
+      };
+    }
+  } else {
+    tuitionItems = ((payData ?? []) as PaymentLedgerRow[]).map((p) => {
+      const st = Array.isArray(p.students) ? p.students[0] : p.students;
+      const name = st?.full_name?.trim() || "طالب";
+      const hasInst = p.installment_id != null && String(p.installment_id).length > 0;
+      const title = hasInst ? `دفعة قسط — ${name}` : `دفعة — ${name}`;
+      const paidAt = p.paid_at ?? "";
+      return {
+        ledgerKey: `p-${p.id}`,
+        source: "tuition_payment" as const,
+        id: p.id,
+        title,
+        amount: toNumber(p.amount),
+        revenueDate: paidAt.slice(0, 10),
+        createdAt: paidAt,
+        canEdit: false,
+      };
+    });
+  }
+
+  const merged = [...manualItems, ...tuitionItems].sort((a, b) => {
+    const da = a.revenueDate.localeCompare(b.revenueDate);
+    if (da !== 0) return -da;
+    return b.createdAt.localeCompare(a.createdAt);
+  });
+
+  const cap = Math.min(Math.max(filters?.limit ?? 250, 1), 500);
+  const sliced = merged.slice(0, cap);
+
+  return {
+    success: true,
+    items: sliced,
+    total: merged.length,
+    hasMore: merged.length > sliced.length,
+    message: "تم جلب سجل الإيرادات.",
   };
 }
 

@@ -1,6 +1,7 @@
 import { createTeacher } from "@/actions/teachers";
 import { resolveSchoolId } from "@/lib/auth/resolve-school-id";
 import { createClient } from "@/lib/supabase/server";
+import Link from "next/link";
 import { redirect } from "next/navigation";
 
 type AddTeachersPageProps = {
@@ -55,12 +56,14 @@ export default async function StaffAddTeachersPage({ searchParams }: AddTeachers
     const phone = asNullableText(formData.get("phone"));
     const subject = asNullableText(formData.get("subject"));
     const salary = asNullableNumber(formData.get("salary"));
+    const salaryInstallmentDueDate = asNullableText(formData.get("salaryInstallmentDueDate"));
 
     const result = await createTeacher({
       fullName,
       phone,
       subject,
       salary,
+      salaryInstallmentDueDate: salaryInstallmentDueDate ?? undefined,
     });
 
     redirect(buildRedirectUrl(result.success ? "success" : "error", result.message));
@@ -70,7 +73,14 @@ export default async function StaffAddTeachersPage({ searchParams }: AddTeachers
     <div className="w-full max-w-6xl space-y-6" dir="rtl">
       <div className="space-y-2">
         <h1 className="text-2xl font-bold">إضافة معلم</h1>
-        <p className="text-sm text-muted-foreground">تسجيل معلم جديد في مدرستك (الحقول وفق جدول المعلمين في قاعدة البيانات).</p>
+        <p className="text-sm text-muted-foreground">
+          تسجيل معلم جديد في مدرستك (الحقول وفق جدول المعلمين في قاعدة البيانات).
+        </p>
+        <p className="text-xs text-muted-foreground">
+          <Link href="/staff/teacher-installments" className="underline hover:text-foreground">
+            رواتب وأقساط المعلمين
+          </Link>
+        </p>
       </div>
 
       {pageMessage ? (
@@ -111,7 +121,7 @@ export default async function StaffAddTeachersPage({ searchParams }: AddTeachers
           </div>
           <div className="space-y-2">
             <label htmlFor="salary" className="text-sm font-medium">
-              الراتب
+              الراتب (أساس قسط الراتب)
             </label>
             <input
               id="salary"
@@ -122,6 +132,23 @@ export default async function StaffAddTeachersPage({ searchParams }: AddTeachers
               defaultValue="0"
               className="w-full rounded-md border bg-background px-3 py-2 text-sm outline-none focus:border-primary"
             />
+            <p className="text-xs text-muted-foreground">
+              إذا كان أكبر من صفر، يُنشأ تلقائياً قسط راتب بنفس المبلغ؛ يجب تعبئة تاريخ الاستحقاق أدناه.
+            </p>
+          </div>
+          <div className="space-y-2">
+            <label htmlFor="salaryInstallmentDueDate" className="text-sm font-medium">
+              تاريخ استحقاق قسط الراتب الأول
+            </label>
+            <input
+              id="salaryInstallmentDueDate"
+              name="salaryInstallmentDueDate"
+              type="date"
+              className="w-full rounded-md border bg-background px-3 py-2 text-sm outline-none focus:border-primary"
+            />
+            <p className="text-xs text-muted-foreground">
+              يُستخدم فقط عندما يكون الراتب أكبر من صفر. حالة الصرف تظهر في «رواتب وأقساط المعلمين».
+            </p>
           </div>
           <div className="space-y-2 md:col-span-2">
             <label htmlFor="subject" className="text-sm font-medium">

@@ -12,12 +12,14 @@ type StaffLayoutProps = {
 };
 
 const staffMenuItems = [
+  { href: "/staff", label: "لوحة التحكم" },
   { href: "/staff/class", label: "الصفوف" },
   { href: "/staff/students", label: "اضافة طالب" },
   { href: "/staff/studentlist", label: "قائمة الطلاب" },
-  { href: "/staff/student-installments", label: "أقساط ودفعات" },
+  { href: "/staff/student-installments", label: "أقساط ودفعات الطلاب" },
   { href: "/staff/addteachers", label: "إضافة معلم" },
   { href: "/staff/teacherslist", label: "قائمة المعلمين" },
+  { href: "/staff/teacher-installments", label: "رواتب وأقساط المعلمين" },
   { href: "/staff/expenses", label: "المصاريف" },
   { href: "/staff/revenues", label: "الإيرادات" },
 ];
@@ -44,7 +46,7 @@ export default async function StaffLayout({ children }: StaffLayoutProps) {
         <nav className="w-full flex justify-center border-b border-b-foreground/10 h-16">
           <div className="w-full max-w-6xl flex justify-between items-center p-3 px-5 text-sm">
             <div className="flex gap-5 items-center font-semibold">
-              <Link href="/staff/class" className="text-foreground/80 hover:text-foreground">
+              <Link href="/staff" className="text-foreground/80 hover:text-foreground">
                 لوحة الموظف
               </Link>
             </div>

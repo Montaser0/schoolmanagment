@@ -107,7 +107,7 @@ create table if not exists public.teachers (
 );
 
 -- ------------------------------------------------------------
--- 4) الجداول — مالية (أقساط، دفعات = إيرادات طلاب، مصروفات، إيرادات إضافية)
+-- 4) الجداول — مالية (أقساط طلاب، دفعات طلاب، أقساط رواتب معلمين، دفعات رواتب، مصروفات، إيرادات)
 -- ------------------------------------------------------------
 
 create table if not exists public.installments (
@@ -126,6 +126,28 @@ create table if not exists public.payments (
   school_id uuid not null references public.schools (id) on delete cascade,
   student_id uuid not null references public.students (id) on delete cascade,
   installment_id uuid references public.installments (id) on delete set null,
+  amount numeric(12, 2) not null check (amount > 0),
+  paid_at timestamptz not null default now(),
+  created_at timestamptz not null default now(),
+  unique (id, school_id)
+);
+
+-- أقساط رواتب المعلمين (فترات استحقاق) + دفعات الصرف المرتبطة بها — تُحسب دفعات المعلمين ضمن total_expenses في v_financial_summary
+create table if not exists public.teacher_installments (
+  id uuid primary key default gen_random_uuid(),
+  school_id uuid not null references public.schools (id) on delete cascade,
+  teacher_id uuid not null references public.teachers (id) on delete cascade,
+  total_amount numeric(12, 2) not null check (total_amount > 0),
+  due_date date not null,
+  created_at timestamptz not null default now(),
+  unique (id, school_id)
+);
+
+create table if not exists public.teacher_payments (
+  id uuid primary key default gen_random_uuid(),
+  school_id uuid not null references public.schools (id) on delete cascade,
+  teacher_id uuid not null references public.teachers (id) on delete cascade,
+  installment_id uuid references public.teacher_installments (id) on delete set null,
   amount numeric(12, 2) not null check (amount > 0),
   paid_at timestamptz not null default now(),
   created_at timestamptz not null default now(),
@@ -230,6 +252,30 @@ alter table public.teacher_attendance
   references public.teachers (id, school_id)
   on delete cascade;
 
+alter table public.teacher_installments
+  drop constraint if exists teacher_installments_teacher_school_fk;
+alter table public.teacher_installments
+  add constraint teacher_installments_teacher_school_fk
+  foreign key (teacher_id, school_id)
+  references public.teachers (id, school_id)
+  on delete cascade;
+
+alter table public.teacher_payments
+  drop constraint if exists teacher_payments_teacher_school_fk;
+alter table public.teacher_payments
+  add constraint teacher_payments_teacher_school_fk
+  foreign key (teacher_id, school_id)
+  references public.teachers (id, school_id)
+  on delete cascade;
+
+alter table public.teacher_payments
+  drop constraint if exists teacher_payments_installment_school_fk;
+alter table public.teacher_payments
+  add constraint teacher_payments_installment_school_fk
+  foreign key (installment_id, school_id)
+  references public.teacher_installments (id, school_id)
+  on delete set null;
+
 -- ------------------------------------------------------------
 -- 7) فهارس
 -- ------------------------------------------------------------
@@ -252,6 +298,13 @@ create index if not exists idx_installments_school_student on public.installment
 create index if not exists idx_payments_school_date on public.payments (school_id, paid_at desc);
 create index if not exists idx_payments_student on public.payments (student_id);
 create index if not exists idx_payments_installment on public.payments (installment_id) where installment_id is not null;
+
+create index if not exists idx_teacher_installments_school_due on public.teacher_installments (school_id, due_date);
+create index if not exists idx_teacher_installments_teacher on public.teacher_installments (teacher_id);
+create index if not exists idx_teacher_installments_school_teacher on public.teacher_installments (school_id, teacher_id);
+create index if not exists idx_teacher_payments_school_date on public.teacher_payments (school_id, paid_at desc);
+create index if not exists idx_teacher_payments_teacher on public.teacher_payments (teacher_id);
+create index if not exists idx_teacher_payments_installment on public.teacher_payments (installment_id) where installment_id is not null;
 
 create index if not exists idx_st_att_school_date on public.student_attendance (school_id, attendance_date);
 create index if not exists idx_tc_att_school_date on public.teacher_attendance (school_id, attendance_date);
@@ -311,6 +364,8 @@ alter table public.student_attendance enable row level security;
 alter table public.teacher_attendance enable row level security;
 alter table public.expenses enable row level security;
 alter table public.revenues enable row level security;
+alter table public.teacher_installments enable row level security;
+alter table public.teacher_payments enable row level security;
 
 -- schools
 drop policy if exists schools_select_policy on public.schools;
@@ -397,6 +452,16 @@ create policy revenues_all_tenant_policy on public.revenues
   for all using (school_id = public.current_user_school_id())
   with check (school_id = public.current_user_school_id());
 
+drop policy if exists teacher_installments_all_tenant_policy on public.teacher_installments;
+create policy teacher_installments_all_tenant_policy on public.teacher_installments
+  for all using (school_id = public.current_user_school_id())
+  with check (school_id = public.current_user_school_id());
+
+drop policy if exists teacher_payments_all_tenant_policy on public.teacher_payments;
+create policy teacher_payments_all_tenant_policy on public.teacher_payments
+  for all using (school_id = public.current_user_school_id())
+  with check (school_id = public.current_user_school_id());
+
 -- ------------------------------------------------------------
 -- 10) إجراءات مخزّنة (RPC) — إنشاء مدرسة + صف المالك
 -- ------------------------------------------------------------
@@ -468,6 +533,27 @@ group by i.id, i.school_id, i.student_id, i.total_amount, i.due_date;
 
 -- يُستخدم من التطبيق (صفحة أقساط الطلاب): من سدّد قسطه والمتبقي عبر الدفعات المرتبطة بـ installment_id
 
+create or replace view public.v_teacher_installment_status as
+select
+  ti.id as installment_id,
+  ti.school_id,
+  ti.teacher_id,
+  ti.total_amount,
+  ti.due_date,
+  coalesce(sum(tp.amount), 0)::numeric(12, 2) as total_paid,
+  (ti.total_amount - coalesce(sum(tp.amount), 0))::numeric(12, 2) as remaining,
+  case
+    when (ti.total_amount - coalesce(sum(tp.amount), 0)) <= 0 then 'paid_full'
+    when coalesce(sum(tp.amount), 0) > 0 and (ti.total_amount - coalesce(sum(tp.amount), 0)) > 0 then 'paid_partial'
+    when coalesce(sum(tp.amount), 0) = 0 and ti.due_date < current_date then 'late'
+    else 'unpaid'
+  end as payment_status
+from public.teacher_installments ti
+left join public.teacher_payments tp
+  on tp.installment_id = ti.id
+ and tp.school_id = ti.school_id
+group by ti.id, ti.school_id, ti.teacher_id, ti.total_amount, ti.due_date;
+
 create or replace view public.v_late_students as
 select
   s.id as student_id,
@@ -488,6 +574,7 @@ where vis.payment_status = 'late'
   and s.status = 'active';
 
 -- total_income = دفعات الطلاب (payments) + إيرادات إضافية (revenues)
+-- total_expenses = مصروفات (expenses) + دفعات رواتب المعلمين (teacher_payments)
 -- net_profit = total_income - total_expenses
 create or replace view public.v_financial_summary as
 select
@@ -496,13 +583,15 @@ select
     coalesce((select sum(p.amount) from public.payments p where p.school_id = s.id), 0)
     + coalesce((select sum(r.amount) from public.revenues r where r.school_id = s.id), 0)
   )::numeric(12, 2) as total_income,
-  coalesce((
-    select sum(e.amount) from public.expenses e where e.school_id = s.id
-  ), 0)::numeric(12, 2) as total_expenses,
+  (
+    coalesce((select sum(e.amount) from public.expenses e where e.school_id = s.id), 0)
+    + coalesce((select sum(tp.amount) from public.teacher_payments tp where tp.school_id = s.id), 0)
+  )::numeric(12, 2) as total_expenses,
   (
     coalesce((select sum(p.amount) from public.payments p where p.school_id = s.id), 0)
     + coalesce((select sum(r.amount) from public.revenues r where r.school_id = s.id), 0)
     - coalesce((select sum(e.amount) from public.expenses e where e.school_id = s.id), 0)
+    - coalesce((select sum(tp.amount) from public.teacher_payments tp where tp.school_id = s.id), 0)
   )::numeric(12, 2) as net_profit
 from public.schools s;
 
@@ -510,5 +599,6 @@ from public.schools s;
 -- 12) ملاحظات ترقية (قواعد موجودة مسبقاً)
 -- ------------------------------------------------------------
 -- • إن وُجد عمود updated_at لأول مرة على schools، أضفه يدوياً أو عطّل السطور أعلاه إن لم تُستخدم.
--- • مناظر PostgREST: فعّل تعريف المنظر في لوحة Supabase (API) إن لزم؛ v_installment_status يُقرأ من الواجهة لحالة الأقساط.
+-- • مناظر PostgREST: فعّل تعريف المنظر في لوحة Supabase (API) إن لزم؛ v_installment_status و v_teacher_installment_status يُقرآن من الواجهة.
+-- • قواعد قديمة بلا teacher_installments/teacher_payments: نفّذ أقسام الجداول/القيود/الفهارس/RLS/المناظر أعلاه ثم أعد إنشاء v_financial_summary.
 -- • لا تُشغّل السكربت كاملاً على قاعدة فيها بيانات إن كان تعريف الجداول يختلف؛ استخدم مقارنة يدوية أو أدوات migration.

@@ -1,0 +1,280 @@
+"use server";
+
+import { resolveSchoolId } from "@/lib/auth/resolve-school-id";
+import { createClient } from "@/lib/supabase/server";
+
+function toNumber(value: number | string | null | undefined): number {
+  if (typeof value === "number") return Number.isFinite(value) ? value : 0;
+  if (typeof value === "string") {
+    const n = Number.parseFloat(value);
+    return Number.isFinite(n) ? n : 0;
+  }
+  return 0;
+}
+
+/** بداية الأسبوع الحالي: الإثنين 00:00 UTC */
+function startOfWeekMondayUtc(): string {
+  const d = new Date();
+  const y = d.getUTCFullYear();
+  const m = d.getUTCMonth();
+  const day = d.getUTCDate();
+  const utcDow = d.getUTCDay();
+  const daysFromMonday = (utcDow + 6) % 7;
+  const start = new Date(Date.UTC(y, m, day - daysFromMonday, 0, 0, 0, 0));
+  return start.toISOString();
+}
+
+function startOfMonthUtc(): string {
+  const d = new Date();
+  return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), 1, 0, 0, 0, 0)).toISOString();
+}
+
+export type LateTuitionStudentRow = {
+  studentId: string;
+  fullName: string;
+  className: string | null;
+  installmentId: string;
+  dueDate: string;
+  remaining: number;
+};
+
+export type NewStudentRow = {
+  id: string;
+  fullName: string;
+  className: string | null;
+  createdAt: string;
+};
+
+export type TeacherPaidRow = {
+  teacherId: string;
+  fullName: string;
+  paymentsCount: number;
+  totalPaid: number;
+  lastPaidAt: string;
+};
+
+export type ClassStudentCount = {
+  classId: string;
+  className: string;
+  count: number;
+};
+
+export type StaffDashboardResult =
+  | {
+      success: true;
+      lateTuitionStudents: LateTuitionStudentRow[];
+      newStudentsThisWeek: NewStudentRow[];
+      teachersPaidThisMonth: TeacherPaidRow[];
+      teachersPaidThisMonthCount: number;
+      totalStudentsActive: number;
+      totalTeachers: number;
+      studentsPerClass: ClassStudentCount[];
+      unassignedClassCount: number;
+      weekStartedAt: string;
+      monthStartedAt: string;
+      warnings: string[];
+    }
+  | { success: false; message: string };
+
+const LIST_LIMIT = 12;
+
+export async function getStaffDashboardStats(): Promise<StaffDashboardResult> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+    error: authError,
+  } = await supabase.auth.getUser();
+
+  if (authError || !user) {
+    return { success: false, message: "يجب تسجيل الدخول أولًا." };
+  }
+
+  const schoolId = await resolveSchoolId(supabase, user.id, user.email);
+  if (!schoolId) {
+    return { success: false, message: "لم يتم العثور على مدرسة مرتبطة بحسابك." };
+  }
+
+  const weekStart = startOfWeekMondayUtc();
+  const monthStart = startOfMonthUtc();
+  const warnings: string[] = [];
+
+  const [
+    lateRes,
+    newStudentsRes,
+    studentsCountRes,
+    teachersCountRes,
+    studentsForClassRes,
+    classesRes,
+    teacherPayRes,
+  ] = await Promise.all([
+    supabase
+      .from("v_late_students")
+      .select("student_id,full_name,class_name,installment_id,due_date,remaining")
+      .eq("school_id", schoolId)
+      .order("due_date", { ascending: true })
+      .limit(LIST_LIMIT),
+    supabase
+      .from("students")
+      .select("id,full_name,created_at,class_id,classes!students_class_school_fk(name)")
+      .eq("school_id", schoolId)
+      .eq("status", "active")
+      .gte("created_at", weekStart)
+      .order("created_at", { ascending: false })
+      .limit(LIST_LIMIT),
+    supabase
+      .from("students")
+      .select("id", { count: "exact", head: true })
+      .eq("school_id", schoolId)
+      .eq("status", "active"),
+    supabase.from("teachers").select("id", { count: "exact", head: true }).eq("school_id", schoolId),
+    supabase.from("students").select("class_id").eq("school_id", schoolId).eq("status", "active"),
+    supabase.from("classes").select("id,name").eq("school_id", schoolId).order("name", { ascending: true }),
+    supabase
+      .from("teacher_payments")
+      .select("id,teacher_id,amount,paid_at,teachers!teacher_payments_teacher_school_fk(full_name)")
+      .eq("school_id", schoolId)
+      .gte("paid_at", monthStart)
+      .order("paid_at", { ascending: false }),
+  ]);
+
+  let lateTuitionStudents: LateTuitionStudentRow[] = [];
+  if (lateRes.error) {
+    const m = lateRes.error.message?.toLowerCase() ?? "";
+    if (m.includes("does not exist") || m.includes("schema cache")) {
+      warnings.push("منظر الطلاب المتأخرين غير متاح؛ تأكد من إنشاء v_late_students في قاعدة البيانات.");
+    } else {
+      warnings.push(`تعذّر تحميل المتأخرين عن القسط: ${lateRes.error.message}`);
+    }
+  } else {
+    lateTuitionStudents = ((lateRes.data ?? []) as Record<string, unknown>[]).map((r) => ({
+      studentId: String(r.student_id ?? ""),
+      fullName: String(r.full_name ?? "—"),
+      className: r.class_name != null ? String(r.class_name) : null,
+      installmentId: String(r.installment_id ?? ""),
+      dueDate: String(r.due_date ?? "").slice(0, 10),
+      remaining: toNumber(r.remaining as number | string),
+    }));
+  }
+
+  type StMeta = {
+    id: string;
+    full_name: string;
+    created_at: string;
+    class_id: string | null;
+    classes: { name: string } | { name: string }[] | null;
+  };
+
+  let newStudentsThisWeek: NewStudentRow[] = [];
+  if (newStudentsRes.error) {
+    warnings.push(`تعذّر تحميل الطلاب الجدد: ${newStudentsRes.error.message}`);
+  } else {
+    newStudentsThisWeek = ((newStudentsRes.data ?? []) as StMeta[]).map((s) => {
+      const cls = Array.isArray(s.classes) ? s.classes[0] : s.classes;
+      return {
+        id: s.id,
+        fullName: s.full_name,
+        className: cls?.name ?? null,
+        createdAt: s.created_at,
+      };
+    });
+  }
+
+  const totalStudentsActive = studentsCountRes.count ?? 0;
+  if (studentsCountRes.error) {
+    warnings.push(`تعذّر عدّ الطلاب: ${studentsCountRes.error.message}`);
+  }
+
+  const totalTeachers = teachersCountRes.count ?? 0;
+  if (teachersCountRes.error) {
+    warnings.push(`تعذّر عدّ المعلمين: ${teachersCountRes.error.message}`);
+  }
+
+  const classNameById = new Map<string, string>();
+  for (const c of (classesRes.data ?? []) as { id: string; name: string }[]) {
+    classNameById.set(c.id, c.name);
+  }
+
+  const countByClass = new Map<string | null, number>();
+  if (!studentsForClassRes.error && studentsForClassRes.data) {
+    for (const row of studentsForClassRes.data as { class_id: string | null }[]) {
+      const k = row.class_id;
+      countByClass.set(k, (countByClass.get(k) ?? 0) + 1);
+    }
+  } else if (studentsForClassRes.error) {
+    warnings.push(`تعذّر توزيع الطلاب على الصفوف: ${studentsForClassRes.error.message}`);
+  }
+
+  let unassignedClassCount = countByClass.get(null) ?? 0;
+  const studentsPerClass: ClassStudentCount[] = [];
+  for (const [classId, count] of countByClass) {
+    if (classId === null) continue;
+    const name = classNameById.get(classId) ?? "صف غير معروف";
+    studentsPerClass.push({ classId, className: name, count });
+  }
+  studentsPerClass.sort((a, b) => a.className.localeCompare(b.className, "ar"));
+
+  type TPay = {
+    teacher_id: string;
+    amount: number | string;
+    paid_at: string;
+    teachers: { full_name: string } | { full_name: string }[] | null;
+  };
+
+  const byTeacher = new Map<
+    string,
+    { fullName: string; paymentsCount: number; totalPaid: number; lastPaidAt: string }
+  >();
+
+  if (teacherPayRes.error) {
+    const m = teacherPayRes.error.message?.toLowerCase() ?? "";
+    if (!m.includes("does not exist") && !m.includes("schema cache")) {
+      warnings.push(`تعذّر تحميل دفعات المعلمين: ${teacherPayRes.error.message}`);
+    }
+  } else {
+    for (const p of (teacherPayRes.data ?? []) as TPay[]) {
+      const t = Array.isArray(p.teachers) ? p.teachers[0] : p.teachers;
+      const name = t?.full_name?.trim() || "معلم";
+      const prev = byTeacher.get(p.teacher_id);
+      const amt = toNumber(p.amount);
+      if (!prev) {
+        byTeacher.set(p.teacher_id, {
+          fullName: name,
+          paymentsCount: 1,
+          totalPaid: amt,
+          lastPaidAt: p.paid_at,
+        });
+      } else {
+        prev.paymentsCount += 1;
+        prev.totalPaid += amt;
+        if (p.paid_at > prev.lastPaidAt) prev.lastPaidAt = p.paid_at;
+        byTeacher.set(p.teacher_id, prev);
+      }
+    }
+  }
+
+  const teachersPaidThisMonth: TeacherPaidRow[] = [...byTeacher.entries()]
+    .map(([teacherId, v]) => ({
+      teacherId,
+      fullName: v.fullName,
+      paymentsCount: v.paymentsCount,
+      totalPaid: Number(v.totalPaid.toFixed(2)),
+      lastPaidAt: v.lastPaidAt,
+    }))
+    .sort((a, b) => b.lastPaidAt.localeCompare(a.lastPaidAt))
+    .slice(0, LIST_LIMIT);
+
+  return {
+    success: true,
+    lateTuitionStudents,
+    newStudentsThisWeek,
+    teachersPaidThisMonth,
+    teachersPaidThisMonthCount: byTeacher.size,
+    totalStudentsActive,
+    totalTeachers,
+    studentsPerClass,
+    unassignedClassCount,
+    weekStartedAt: weekStart,
+    monthStartedAt: monthStart,
+    warnings,
+  };
+}

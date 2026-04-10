@@ -47,6 +47,8 @@ export type CreateTeacherInput = {
   phone?: string | null;
   salary?: number;
   subject?: string | null;
+  /** عندما يكون الراتب أكبر من صفر يُنشأ تلقائياً قسط راتب بنفس المبلغ مع هذا تاريخ الاستحقاق. */
+  salaryInstallmentDueDate?: string;
 };
 
 export type UpdateTeacherInput = {
@@ -253,8 +255,19 @@ async function getAuthContext(): Promise<AuthContext> {
 function revalidateTeachersViews() {
   revalidatePath("/staff/addteachers");
   revalidatePath("/staff/teacherslist");
+  revalidatePath("/staff/teacher-installments");
   revalidatePath("/staff");
   revalidatePath("/admin");
+}
+
+/** YYYY-MM-DD صالح أو null */
+function salaryInstallmentDueDateStringOrNull(value: string | undefined): string | null {
+  const v = value?.trim();
+  if (!v) return null;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(v)) return null;
+  const d = new Date(`${v}T00:00:00Z`);
+  if (Number.isNaN(d.getTime())) return null;
+  return v.slice(0, 10);
 }
 
 export async function createTeacher(input: CreateTeacherInput): Promise<ActionResult> {
@@ -271,24 +284,64 @@ export async function createTeacher(input: CreateTeacherInput): Promise<ActionRe
     return { success: false, message: "قيمة الراتب غير صحيحة." };
   }
 
+  if (salary > 0) {
+    const due = salaryInstallmentDueDateStringOrNull(input.salaryInstallmentDueDate);
+    if (!due) {
+      return {
+        success: false,
+        message: "عند إدخال راتب أكبر من صفر يجب تحديد تاريخ استحقاق قسط الراتب الأول.",
+      };
+    }
+  }
+
   const auth = await getAuthContext();
   if (!auth.ok) return { success: false, message: auth.message };
 
   const supabase = await createClient();
-  const { error } = await supabase.from("teachers").insert({
-    school_id: auth.schoolId,
-    full_name: fullName,
-    phone,
-    salary,
-    subject,
-  });
+  const { data: inserted, error } = await supabase
+    .from("teachers")
+    .insert({
+      school_id: auth.schoolId,
+      full_name: fullName,
+      phone,
+      salary,
+      subject,
+    })
+    .select("id")
+    .single();
 
-  if (error) {
-    return { success: false, message: error.message ?? "فشل إضافة المعلم." };
+  if (error || !inserted?.id) {
+    return { success: false, message: error?.message ?? "فشل إضافة المعلم." };
+  }
+
+  const newTeacherId = inserted.id as string;
+
+  if (salary > 0) {
+    const due = salaryInstallmentDueDateStringOrNull(input.salaryInstallmentDueDate)!;
+    const { error: instError } = await supabase.from("teacher_installments").insert({
+      school_id: auth.schoolId,
+      teacher_id: newTeacherId,
+      total_amount: salary,
+      due_date: due,
+    });
+
+    if (instError) {
+      await supabase.from("teachers").delete().eq("id", newTeacherId).eq("school_id", auth.schoolId);
+      return {
+        success: false,
+        message: instError.message ?? "فشل إنشاء قسط الراتب المرتبط بالمعلم (تأكد من إنشاء الجداول في قاعدة البيانات).",
+      };
+    }
   }
 
   revalidateTeachersViews();
-  return { success: true, message: "تمت إضافة المعلم بنجاح." };
+  return {
+    success: true,
+    message:
+      salary > 0
+        ? "تمت إضافة المعلم وإنشاء قسط الراتب الأول بنفس مبلغ الراتب."
+        : "تمت إضافة المعلم بنجاح.",
+  };
 }
 
 export async function updateTeacher(input: UpdateTeacherInput): Promise<ActionResult> {

@@ -3,7 +3,7 @@ import {
   deleteExpense,
   getFinancialSummary,
   getTotalExpensesAmount,
-  listExpenses,
+  listExpenseLedger,
   updateExpense,
 } from "@/actions/expenses";
 import { resolveSchoolId } from "@/lib/auth/resolve-school-id";
@@ -83,13 +83,13 @@ export default async function StaffExpensesPage({ searchParams }: ExpensesPagePr
     );
   }
 
-  const [listResult, totalResult, summaryResult] = await Promise.all([
-    listExpenses(),
+  const [ledgerResult, totalResult, summaryResult] = await Promise.all([
+    listExpenseLedger(),
     getTotalExpensesAmount(),
     getFinancialSummary(),
   ]);
 
-  const expenses = listResult.success ? listResult.expenses : [];
+  const ledgerItems = ledgerResult.success ? ledgerResult.items : [];
 
   let editing: ExpenseEditRow | undefined;
   if (editId) {
@@ -182,7 +182,10 @@ export default async function StaffExpensesPage({ searchParams }: ExpensesPagePr
     <div className="w-full max-w-6xl space-y-6" dir="rtl">
       <div className="space-y-2">
         <h1 className="text-2xl font-bold">المصاريف</h1>
-        <p className="text-sm text-muted-foreground">تسجيل ومتابعة مصاريف المدرسة.</p>
+        <p className="text-sm text-muted-foreground">
+          سجل المصاريف أدناه يجمع تلقائياً دفعات رواتب المعلمين (عند الصرف من صفحة أقساط الرواتب) مع المصروفات
+          اليدوية المسجّلة في النموذج. إجمالي المصروفات في البطاقة يطابق الملخص المالي دون تكرار في قاعدة البيانات.
+        </p>
       </div>
 
       {pageMessage ? (
@@ -197,9 +200,9 @@ export default async function StaffExpensesPage({ searchParams }: ExpensesPagePr
         </div>
       ) : null}
 
-      {!listResult.success ? (
+      {!ledgerResult.success ? (
         <div className="rounded-md border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-900">
-          {listResult.message}
+          {ledgerResult.message}
         </div>
       ) : null}
 
@@ -227,8 +230,8 @@ export default async function StaffExpensesPage({ searchParams }: ExpensesPagePr
           )}
           {summaryResult.success ? (
             <p className="mt-2 text-xs text-muted-foreground leading-relaxed">
-              الإيرادات تشمل دفعات الطلاب (جدول الدفعات) والإيرادات المسجّلة في صفحة الإيرادات؛ الرصيد = تلك
-              الإيرادات ناقص المصروفات. لا يُسمح بتسجيل مصروف يتجاوز الرصيد إلا بعد تأكيد أنه من مال شخصي.
+              الإيرادات تشمل دفعات الطلاب والإيرادات المسجّلة؛ المصروفات تشمل المصروفات اليدوية ودفعات رواتب المعلمين.
+              الرصيد = الإيرادات ناقص المصروفات. لا يُسمح بتسجيل مصروف يتجاوز الرصيد إلا بعد تأكيد أنه من مال شخصي.
             </p>
           ) : null}
         </div>
@@ -377,7 +380,14 @@ export default async function StaffExpensesPage({ searchParams }: ExpensesPagePr
         <div className="border-b px-5 py-3">
           <h2 className="text-lg font-semibold">سجل المصاريف</h2>
           <p className="text-xs text-muted-foreground mt-1">
-            {listResult.success ? `عدد السجلات المعروضة: ${expenses.length}` : null}
+            {ledgerResult.success ? (
+              <>
+                المعروض: {ledgerItems.length}
+                {ledgerResult.hasMore
+                  ? ` — من أصل ${ledgerResult.total} (الأحدث أولاً؛ لقائمة دفعات الرواتب الكاملة استخدم أقساط المعلمين).`
+                  : null}
+              </>
+            ) : null}
           </p>
         </div>
         <div className="overflow-x-auto">
@@ -385,42 +395,68 @@ export default async function StaffExpensesPage({ searchParams }: ExpensesPagePr
             <thead className="bg-muted/50 text-right">
               <tr>
                 <th className="px-4 py-2 font-medium">التاريخ</th>
-                <th className="px-4 py-2 font-medium">العنوان</th>
+                <th className="px-4 py-2 font-medium">النوع / العنوان</th>
                 <th className="px-4 py-2 font-medium">المبلغ</th>
                 <th className="px-4 py-2 font-medium w-[1%] whitespace-nowrap">إجراءات</th>
               </tr>
             </thead>
             <tbody>
-              {expenses.length === 0 ? (
+              {ledgerItems.length === 0 ? (
                 <tr>
                   <td colSpan={4} className="px-4 py-8 text-center text-muted-foreground">
-                    لا توجد مصاريف مسجّلة.
+                    لا توجد حركات في السجل (لا دفعات رواتب ولا مصروفات يدوية).
                   </td>
                 </tr>
               ) : (
-                expenses.map((row) => (
-                  <tr key={row.id} className="border-t">
+                ledgerItems.map((row) => (
+                  <tr key={row.ledgerKey} className="border-t">
                     <td className="px-4 py-2 whitespace-nowrap">{row.expenseDate}</td>
-                    <td className="px-4 py-2">{row.title}</td>
+                    <td className="px-4 py-2">
+                      <div className="flex flex-wrap items-center gap-2">
+                        {row.source === "teacher_salary_payment" ? (
+                          <span className="rounded-md bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">
+                            دفعة راتب
+                          </span>
+                        ) : row.type === "salary" ? (
+                          <span className="rounded-md bg-amber-500/15 px-2 py-0.5 text-xs font-medium text-amber-900">
+                            راتب
+                          </span>
+                        ) : (
+                          <span className="rounded-md bg-muted px-2 py-0.5 text-xs font-medium">عام</span>
+                        )}
+                        <span>{row.title}</span>
+                      </div>
+                    </td>
                     <td className="px-4 py-2 tabular-nums">{row.amount.toLocaleString("ar-EG")}</td>
                     <td className="px-4 py-2">
-                      <div className="flex flex-wrap gap-2 justify-end">
-                        <Link
-                          href={`/staff/expenses?edit=${row.id}`}
-                          className="rounded-md border px-2 py-1 text-xs hover:bg-muted"
-                        >
-                          تعديل
-                        </Link>
-                        <form action={deleteExpenseAction}>
-                          <input type="hidden" name="id" value={row.id} />
-                          <button
-                            type="submit"
-                            className="rounded-md border border-red-500/40 px-2 py-1 text-xs text-red-700 hover:bg-red-500/10"
+                      {row.canEdit ? (
+                        <div className="flex flex-wrap gap-2 justify-end">
+                          <Link
+                            href={`/staff/expenses?edit=${row.id}`}
+                            className="rounded-md border px-2 py-1 text-xs hover:bg-muted"
                           >
-                            حذف
-                          </button>
-                        </form>
-                      </div>
+                            تعديل
+                          </Link>
+                          <form action={deleteExpenseAction}>
+                            <input type="hidden" name="id" value={row.id} />
+                            <button
+                              type="submit"
+                              className="rounded-md border border-red-500/40 px-2 py-1 text-xs text-red-700 hover:bg-red-500/10"
+                            >
+                              حذف
+                            </button>
+                          </form>
+                        </div>
+                      ) : (
+                        <div className="flex flex-wrap justify-end gap-2">
+                          <Link
+                            href="/staff/teacher-installments"
+                            className="rounded-md border px-2 py-1 text-xs hover:bg-muted"
+                          >
+                            أقساط المعلمين
+                          </Link>
+                        </div>
+                      )}
                     </td>
                   </tr>
                 ))

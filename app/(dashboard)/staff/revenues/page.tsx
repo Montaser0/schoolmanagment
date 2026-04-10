@@ -3,7 +3,7 @@ import {
   createRevenue,
   deleteRevenue,
   getTotalRevenuesAmount,
-  listRevenues,
+  listRevenueLedger,
   updateRevenue,
 } from "@/actions/revenues";
 import { resolveSchoolId } from "@/lib/auth/resolve-school-id";
@@ -78,13 +78,13 @@ export default async function StaffRevenuesPage({ searchParams }: RevenuesPagePr
     );
   }
 
-  const [listResult, totalResult, summaryResult] = await Promise.all([
-    listRevenues(),
+  const [ledgerResult, totalResult, summaryResult] = await Promise.all([
+    listRevenueLedger(),
     getTotalRevenuesAmount(),
     getFinancialSummary(),
   ]);
 
-  const revenues = listResult.success ? listResult.revenues : [];
+  const ledgerItems = ledgerResult.success ? ledgerResult.items : [];
 
   let editing: RevenueEditRow | undefined;
   if (editId) {
@@ -174,8 +174,8 @@ export default async function StaffRevenuesPage({ searchParams }: RevenuesPagePr
       <div className="space-y-2">
         <h1 className="text-2xl font-bold">الإيرادات</h1>
         <p className="text-sm text-muted-foreground">
-          دفعات الطلاب تُعدّ من إيرادات المدرسة وتُحسب تلقائياً من سجل الدفعات. هنا تسجّل إيرادات إضافية
-          (تبرعات، دعم، إيجار، …) تُجمع مع دفعات الطلاب في الملخص المالي وصفحة المصاريف.
+          سجل الإيرادات أدناه يجمع تلقائياً دفعات أقساط الطلاب (عند التسديد من صفحة الأقساط) مع الإيرادات اليدوية التي
+          تُسجَّل في النموذج (تبرعات، دعم، إيجار، …). الملخص المالي يحسب الإجمالي مرة واحدة دون تكرار في قاعدة البيانات.
         </p>
       </div>
 
@@ -191,9 +191,9 @@ export default async function StaffRevenuesPage({ searchParams }: RevenuesPagePr
         </div>
       ) : null}
 
-      {!listResult.success ? (
+      {!ledgerResult.success ? (
         <div className="rounded-md border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-900">
-          {listResult.message}
+          {ledgerResult.message}
         </div>
       ) : null}
 
@@ -224,7 +224,7 @@ export default async function StaffRevenuesPage({ searchParams }: RevenuesPagePr
           )}
         </div>
         <div className="rounded-lg border bg-card p-5 shadow-sm sm:col-span-2">
-          <p className="text-sm font-medium text-muted-foreground">منها: إيرادات مسجّلة في هذه الصفحة</p>
+          <p className="text-sm font-medium text-muted-foreground">منها: إيرادات يدوية فقط (جدول revenues)</p>
           {totalResult.success ? (
             <p className="mt-2 text-2xl font-bold tabular-nums">{totalDisplay}</p>
           ) : (
@@ -352,7 +352,14 @@ export default async function StaffRevenuesPage({ searchParams }: RevenuesPagePr
         <div className="border-b px-5 py-3">
           <h2 className="text-lg font-semibold">سجل الإيرادات</h2>
           <p className="text-xs text-muted-foreground mt-1">
-            {listResult.success ? `عدد السجلات المعروضة: ${revenues.length}` : null}
+            {ledgerResult.success ? (
+              <>
+                المعروض: {ledgerItems.length}
+                {ledgerResult.hasMore
+                  ? ` — من أصل ${ledgerResult.total} (الأحدث أولاً؛ لقائمة الدفعات الكاملة استخدم أقساط الطلاب).`
+                  : null}
+              </>
+            ) : null}
           </p>
         </div>
         <div className="overflow-x-auto">
@@ -360,42 +367,64 @@ export default async function StaffRevenuesPage({ searchParams }: RevenuesPagePr
             <thead className="bg-muted/50 text-right">
               <tr>
                 <th className="px-4 py-2 font-medium">التاريخ</th>
-                <th className="px-4 py-2 font-medium">العنوان</th>
+                <th className="px-4 py-2 font-medium">النوع / العنوان</th>
                 <th className="px-4 py-2 font-medium">المبلغ</th>
                 <th className="px-4 py-2 font-medium w-[1%] whitespace-nowrap">إجراءات</th>
               </tr>
             </thead>
             <tbody>
-              {revenues.length === 0 ? (
+              {ledgerItems.length === 0 ? (
                 <tr>
                   <td colSpan={4} className="px-4 py-8 text-center text-muted-foreground">
-                    لا توجد إيرادات مسجّلة.
+                    لا توجد حركات في السجل (لا دفعات قسط ولا إيرادات يدوية).
                   </td>
                 </tr>
               ) : (
-                revenues.map((row) => (
-                  <tr key={row.id} className="border-t">
+                ledgerItems.map((row) => (
+                  <tr key={row.ledgerKey} className="border-t">
                     <td className="px-4 py-2 whitespace-nowrap">{row.revenueDate}</td>
-                    <td className="px-4 py-2">{row.title}</td>
+                    <td className="px-4 py-2">
+                      <div className="flex flex-wrap items-center gap-2">
+                        {row.source === "tuition_payment" ? (
+                          <span className="rounded-md bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">
+                            دفعة قسط
+                          </span>
+                        ) : (
+                          <span className="rounded-md bg-muted px-2 py-0.5 text-xs font-medium">يدوي</span>
+                        )}
+                        <span>{row.title}</span>
+                      </div>
+                    </td>
                     <td className="px-4 py-2 tabular-nums">{row.amount.toLocaleString("ar-EG")}</td>
                     <td className="px-4 py-2">
-                      <div className="flex flex-wrap gap-2 justify-end">
-                        <Link
-                          href={`/staff/revenues?edit=${row.id}`}
-                          className="rounded-md border px-2 py-1 text-xs hover:bg-muted"
-                        >
-                          تعديل
-                        </Link>
-                        <form action={deleteRevenueAction}>
-                          <input type="hidden" name="id" value={row.id} />
-                          <button
-                            type="submit"
-                            className="rounded-md border border-red-500/40 px-2 py-1 text-xs text-red-700 hover:bg-red-500/10"
+                      {row.canEdit ? (
+                        <div className="flex flex-wrap gap-2 justify-end">
+                          <Link
+                            href={`/staff/revenues?edit=${row.id}`}
+                            className="rounded-md border px-2 py-1 text-xs hover:bg-muted"
                           >
-                            حذف
-                          </button>
-                        </form>
-                      </div>
+                            تعديل
+                          </Link>
+                          <form action={deleteRevenueAction}>
+                            <input type="hidden" name="id" value={row.id} />
+                            <button
+                              type="submit"
+                              className="rounded-md border border-red-500/40 px-2 py-1 text-xs text-red-700 hover:bg-red-500/10"
+                            >
+                              حذف
+                            </button>
+                          </form>
+                        </div>
+                      ) : (
+                        <div className="flex flex-wrap justify-end gap-2">
+                          <Link
+                            href="/staff/student-installments"
+                            className="rounded-md border px-2 py-1 text-xs hover:bg-muted"
+                          >
+                            أقساط الطلاب
+                          </Link>
+                        </div>
+                      )}
                     </td>
                   </tr>
                 ))
