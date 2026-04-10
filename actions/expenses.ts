@@ -1,0 +1,346 @@
+"use server";
+
+import { revalidatePath } from "next/cache";
+import { resolveSchoolId } from "@/lib/auth/resolve-school-id";
+import { createClient } from "@/lib/supabase/server";
+
+/** يطابق public.expense_type في schame.md */
+export type ExpenseType = "salary" | "general";
+
+type ActionResult =
+  | { success: true; message: string }
+  | { success: false; message: string };
+
+type AuthContext =
+  | { ok: true; userId: string; schoolId: string }
+  | { ok: false; message: string };
+
+type ExpenseRow = {
+  id: string;
+  school_id: string;
+  title: string;
+  amount: number | string;
+  type: ExpenseType;
+  expense_date: string;
+  created_at: string;
+};
+
+export type CreateExpenseInput = {
+  title: string;
+  amount: number;
+  expenseDate?: string;
+  /** افتراضي: general (العمود مطلوب في قاعدة البيانات) */
+  type?: ExpenseType;
+};
+
+export type UpdateExpenseInput = {
+  id: string;
+  title?: string;
+  amount?: number;
+  type?: ExpenseType;
+  expenseDate?: string;
+};
+
+export type DeleteExpenseInput = {
+  id: string;
+};
+
+export type ExpenseListItem = {
+  id: string;
+  title: string;
+  amount: number;
+  type: ExpenseType;
+  expenseDate: string;
+  createdAt: string;
+};
+
+export type ListExpensesFilters = {
+  type?: ExpenseType;
+  from?: string;
+  to?: string;
+  limit?: number;
+};
+
+export type ListExpensesResult =
+  | {
+      success: true;
+      expenses: ExpenseListItem[];
+      total: number;
+      message: string;
+    }
+  | {
+      success: false;
+      expenses: [];
+      total: 0;
+      message: string;
+    };
+
+export type TotalExpensesResult =
+  | { success: true; total: number }
+  | { success: false; total: 0; message: string };
+
+function normalizeTitle(value: string): string {
+  return value.trim();
+}
+
+function parseExpenseType(value: string): ExpenseType | null {
+  const v = value.trim();
+  if (v === "salary" || v === "general") return v;
+  return null;
+}
+
+function toStrictlyPositiveAmount(value: number | undefined): number {
+  if (value === undefined) return -1;
+  if (!Number.isFinite(value) || value <= 0) return -1;
+  return Number(value.toFixed(2));
+}
+
+function toNumber(value: number | string | null | undefined): number {
+  if (typeof value === "number") return Number.isFinite(value) ? value : 0;
+  if (typeof value === "string") {
+    const parsed = Number.parseFloat(value);
+    return Number.isFinite(parsed) ? parsed : 0;
+  }
+  return 0;
+}
+
+function parseDateOnly(dateText: string | undefined): string | null {
+  const value = dateText?.trim();
+  if (!value) return null;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return null;
+  const date = new Date(`${value}T00:00:00Z`);
+  if (Number.isNaN(date.getTime())) return null;
+  return value;
+}
+
+async function getAuthContext(): Promise<AuthContext> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+    error: authError,
+  } = await supabase.auth.getUser();
+
+  if (authError || !user) {
+    return { ok: false, message: "يجب تسجيل الدخول أولًا." };
+  }
+
+  const schoolId = await resolveSchoolId(supabase, user.id, user.email);
+  if (!schoolId) {
+    return { ok: false, message: "لم يتم العثور على مدرسة مرتبطة بحسابك." };
+  }
+
+  return { ok: true, userId: user.id, schoolId };
+}
+
+function revalidateExpensesViews() {
+  revalidatePath("/staff/expenses");
+  revalidatePath("/admin");
+}
+
+function mapRow(row: ExpenseRow): ExpenseListItem {
+  return {
+    id: row.id,
+    title: row.title,
+    amount: toNumber(row.amount),
+    type: row.type,
+    expenseDate: row.expense_date,
+    createdAt: row.created_at,
+  };
+}
+
+export async function listExpenses(filters?: ListExpensesFilters): Promise<ListExpensesResult> {
+  const auth = await getAuthContext();
+  if (!auth.ok) {
+    return { success: false, expenses: [], total: 0, message: auth.message };
+  }
+
+  const supabase = await createClient();
+  let query = supabase
+    .from("expenses")
+    .select("*", { count: "exact" })
+    .eq("school_id", auth.schoolId)
+    .order("expense_date", { ascending: false })
+    .order("created_at", { ascending: false });
+
+  if (filters?.type) {
+    query = query.eq("type", filters.type);
+  }
+  if (filters?.from) {
+    const from = parseDateOnly(filters.from);
+    if (from) query = query.gte("expense_date", from);
+  }
+  if (filters?.to) {
+    const to = parseDateOnly(filters.to);
+    if (to) query = query.lte("expense_date", to);
+  }
+
+  const limit = filters?.limit ?? 200;
+  query = query.limit(Math.min(Math.max(limit, 1), 500));
+
+  const { data, error, count } = await query;
+
+  if (error) {
+    return {
+      success: false,
+      expenses: [],
+      total: 0,
+      message: error.message ?? "فشل جلب المصاريف.",
+    };
+  }
+
+  const rows = (data ?? []) as ExpenseRow[];
+  return {
+    success: true,
+    expenses: rows.map(mapRow),
+    total: count ?? rows.length,
+    message: "تم جلب المصاريف.",
+  };
+}
+
+export async function getTotalExpensesAmount(): Promise<TotalExpensesResult> {
+  const auth = await getAuthContext();
+  if (!auth.ok) {
+    return { success: false, total: 0, message: auth.message };
+  }
+
+  const supabase = await createClient();
+
+  const { data: summaryRow, error: summaryError } = await supabase
+    .from("v_financial_summary")
+    .select("total_expenses")
+    .eq("school_id", auth.schoolId)
+    .maybeSingle();
+
+  if (!summaryError && summaryRow && typeof summaryRow === "object") {
+    const raw = (summaryRow as { total_expenses?: string | number | null }).total_expenses;
+    return { success: true, total: toNumber(raw) };
+  }
+
+  const { data: amountRows, error: listError } = await supabase
+    .from("expenses")
+    .select("amount")
+    .eq("school_id", auth.schoolId);
+
+  if (listError) {
+    return {
+      success: false,
+      total: 0,
+      message: listError.message ?? "فشل حساب إجمالي المصاريف.",
+    };
+  }
+
+  let sum = 0;
+  for (const row of amountRows ?? []) {
+    sum += toNumber((row as { amount?: string | number | null }).amount);
+  }
+  return { success: true, total: Number(sum.toFixed(2)) };
+}
+
+export async function createExpense(input: CreateExpenseInput): Promise<ActionResult> {
+  const title = normalizeTitle(input.title);
+  const amount = toStrictlyPositiveAmount(input.amount);
+  const type = parseExpenseType(input.type?.trim() ?? "general") ?? "general";
+  const expenseDate = parseDateOnly(input.expenseDate) ?? new Date().toISOString().slice(0, 10);
+
+  if (!title) {
+    return { success: false, message: "عنوان المصروف مطلوب." };
+  }
+  if (amount <= 0) {
+    return { success: false, message: "المبلغ يجب أن يكون أكبر من صفر." };
+  }
+
+  const auth = await getAuthContext();
+  if (!auth.ok) return { success: false, message: auth.message };
+
+  const supabase = await createClient();
+  const { error } = await supabase.from("expenses").insert({
+    school_id: auth.schoolId,
+    title,
+    amount,
+    type,
+    expense_date: expenseDate,
+  });
+
+  if (error) {
+    return { success: false, message: error.message ?? "فشل تسجيل المصروف." };
+  }
+
+  revalidateExpensesViews();
+  return { success: true, message: "تم تسجيل المصروف بنجاح." };
+}
+
+export async function updateExpense(input: UpdateExpenseInput): Promise<ActionResult> {
+  const id = input.id?.trim();
+  if (!id) {
+    return { success: false, message: "معرّف المصروف مطلوب." };
+  }
+
+  const updates: Record<string, unknown> = {};
+
+  if (input.title !== undefined) {
+    const title = normalizeTitle(input.title);
+    if (!title) return { success: false, message: "عنوان المصروف غير صالح." };
+    updates.title = title;
+  }
+
+  if (input.amount !== undefined) {
+    const amount = toStrictlyPositiveAmount(input.amount);
+    if (amount <= 0) {
+      return { success: false, message: "المبلغ يجب أن يكون أكبر من صفر." };
+    }
+    updates.amount = amount;
+  }
+
+  if (input.type !== undefined) {
+    const type = parseExpenseType(input.type);
+    if (!type) return { success: false, message: "نوع المصروف غير صالح." };
+    updates.type = type;
+  }
+
+  if (input.expenseDate !== undefined) {
+    const d = parseDateOnly(input.expenseDate);
+    if (!d) return { success: false, message: "تاريخ المصروف غير صالح." };
+    updates.expense_date = d;
+  }
+
+  if (Object.keys(updates).length === 0) {
+    return { success: false, message: "لا يوجد أي حقل لتعديله." };
+  }
+
+  const auth = await getAuthContext();
+  if (!auth.ok) return { success: false, message: auth.message };
+
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("expenses")
+    .update(updates)
+    .eq("id", id)
+    .eq("school_id", auth.schoolId);
+
+  if (error) {
+    return { success: false, message: error.message ?? "فشل تعديل المصروف." };
+  }
+
+  revalidateExpensesViews();
+  return { success: true, message: "تم تعديل المصروف بنجاح." };
+}
+
+export async function deleteExpense(input: DeleteExpenseInput): Promise<ActionResult> {
+  const id = input.id?.trim();
+  if (!id) {
+    return { success: false, message: "معرّف المصروف مطلوب." };
+  }
+
+  const auth = await getAuthContext();
+  if (!auth.ok) return { success: false, message: auth.message };
+
+  const supabase = await createClient();
+  const { error } = await supabase.from("expenses").delete().eq("id", id).eq("school_id", auth.schoolId);
+
+  if (error) {
+    return { success: false, message: error.message ?? "فشل حذف المصروف." };
+  }
+
+  revalidateExpensesViews();
+  return { success: true, message: "تم حذف المصروف." };
+}
