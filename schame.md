@@ -44,15 +44,15 @@ create table if not exists public.schools (
   subscription_plan public.subscription_type not null default 'trial',
   created_at timestamptz not null default now()
 );
-
--- 2) المستخدمين (Profiles)
-create table if not exists public.profiles (
-  id uuid primary key references auth.users(id) on delete cascade,
-  school_id uuid not null references public.schools(id) on delete cascade,
-  role public.user_role not null default 'staff',
-  created_at timestamptz not null default now(),
-  unique (id, school_id)
-);
+create table if not exists public.users(
+  id uuid primary key default gen_random_uuid(),
+  email 
+  full name 
+  role 
+  school_id
+  
+)
+ 
 
 -- 3) الصفوف
 create table if not exists public.classes (

@@ -35,12 +35,12 @@ export default async function SchoolsPage({ searchParams }: SchoolsPageProps) {
 
     if (!result.success) {
       redirect(
-        `/protected/schools?status=error&message=${encodeURIComponent(result.message)}`,
+        `/admin/schools?status=error&message=${encodeURIComponent(result.message)}`,
       );
     }
 
     redirect(
-      `/protected/schools?status=success&message=${encodeURIComponent(result.message)}`,
+      `/admin/schools?status=success&message=${encodeURIComponent(result.message)}`,
     );
   }
 

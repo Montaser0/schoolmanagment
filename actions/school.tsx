@@ -74,6 +74,9 @@ export async function createSchoolWithOwner(
     auth: { autoRefreshToken: false, persistSession: false },
   });
 
+  let ownerId: string | null = null;
+  let createdNewAuthUser = false;
+
   const { data: createdUser, error: createUserError } =
     await adminClient.auth.admin.createUser({
       email: ownerEmail,
@@ -82,13 +85,43 @@ export async function createSchoolWithOwner(
     });
 
   if (createUserError || !createdUser.user) {
-    return {
-      success: false,
-      message: createUserError?.message ?? "فشل إنشاء حساب مالك المدرسة.",
-    };
+    const alreadyRegistered = createUserError?.message
+      ?.toLowerCase()
+      .includes("already been registered");
+
+    if (!alreadyRegistered) {
+      return {
+        success: false,
+        message: createUserError?.message ?? "فشل إنشاء حساب مالك المدرسة.",
+      };
+    }
+
+    const { data: existingUser, error: existingUserError } = await adminClient
+      .from("users")
+      .select("id")
+      .eq("email", ownerEmail)
+      .maybeSingle();
+
+    if (existingUserError || !existingUser?.id) {
+      return {
+        success: false,
+        message:
+          "هذا البريد مسجل مسبقا، لكن لم يتم العثور عليه في جدول users. تأكد من تطابق users.id مع auth.users.id.",
+      };
+    }
+
+    ownerId = existingUser.id as string;
+  } else {
+    ownerId = createdUser.user.id;
+    createdNewAuthUser = true;
   }
 
-  const ownerId = createdUser.user.id;
+  if (!ownerId) {
+    return {
+      success: false,
+      message: "تعذر تحديد هوية مالك المدرسة.",
+    };
+  }
   let schoolId: string | null = null;
 
   try {
@@ -108,17 +141,68 @@ export async function createSchoolWithOwner(
 
     schoolId = school.id;
 
-    const { error: profileError } = await adminClient.from("profiles").insert({
-      id: ownerId,
-      school_id: schoolId,
-      role: "owner",
-    });
+    // البيئة الحالية تعتمد public.users كمصدر أساسي لربط المستخدم بالمدرسة.
+    const { error: legacyUserError } = await adminClient.from("users").upsert(
+      {
+        id: ownerId,
+        email: ownerEmail,
+        school_id: schoolId,
+        role: "staff",
+      },
+      { onConflict: "id" },
+    );
 
-    if (profileError) {
-      throw new Error(profileError.message);
+    const upsertConflictUnsupported =
+      !!legacyUserError &&
+      legacyUserError.message
+        .toLowerCase()
+        .includes("there is no unique or exclusion constraint matching the on conflict specification");
+
+    if (upsertConflictUnsupported) {
+      const { error: updateByIdError } = await adminClient
+        .from("users")
+        .update({
+          school_id: schoolId,
+          role: "staff",
+        })
+        .eq("id", ownerId);
+
+      if (updateByIdError) {
+        throw new Error(updateByIdError.message);
+      }
+
+      const { error: updateByEmailError } = await adminClient
+        .from("users")
+        .update({
+          school_id: schoolId,
+          role: "staff",
+        })
+        .eq("email", ownerEmail);
+
+      if (updateByEmailError) {
+        throw new Error(updateByEmailError.message);
+      }
+    } else if (legacyUserError) {
+      throw new Error(legacyUserError.message);
+    }
+
+    const { data: ownerUserRow, error: ownerUserLookupError } = await adminClient
+      .from("users")
+      .select("school_id")
+      .eq("id", ownerId)
+      .maybeSingle();
+
+    if (ownerUserLookupError) {
+      throw new Error(ownerUserLookupError.message);
+    }
+
+    if (!ownerUserRow?.school_id || ownerUserRow.school_id !== schoolId) {
+      throw new Error("فشل ربط المستخدم بالمدرسة في جدول users (school_id).");
     }
   } catch (error) {
-    await adminClient.auth.admin.deleteUser(ownerId);
+    if (createdNewAuthUser) {
+      await adminClient.auth.admin.deleteUser(ownerId);
+    }
 
     if (error instanceof Error && error.message.toLowerCase().includes("permission denied")) {
       return {
@@ -134,7 +218,7 @@ export async function createSchoolWithOwner(
     };
   }
 
-  revalidatePath("/protected/schools");
+  revalidatePath("/admin/schools");
 
   return {
     success: true,

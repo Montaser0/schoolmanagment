@@ -9,15 +9,6 @@ export async function resolveSchoolId(
   userId: string,
   userEmail?: string | null,
 ): Promise<string | null> {
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("school_id")
-    .eq("id", userId)
-    .maybeSingle();
-
-  const fromProfile = (profile as SchoolRow | null)?.school_id ?? null;
-  if (fromProfile) return fromProfile;
-
   const { data: userById, error: byIdError } = await supabase
     .from("users")
     .select("school_id")
@@ -41,5 +32,20 @@ export async function resolveSchoolId(
     .maybeSingle();
 
   if (byEmailError) return null;
-  return (userByEmail as SchoolRow | null)?.school_id ?? null;
+  const fromUsersByEmail = (userByEmail as SchoolRow | null)?.school_id ?? null;
+  if (fromUsersByEmail) return fromUsersByEmail;
+
+  // توافق اختياري إذا وُجد جدول profiles في بعض البيئات.
+  const { data: profileById, error: profileByIdError } = await supabase
+    .from("profiles")
+    .select("school_id")
+    .eq("id", userId)
+    .maybeSingle();
+
+  if (!profileByIdError) {
+    const fromProfileById = (profileById as SchoolRow | null)?.school_id ?? null;
+    if (fromProfileById) return fromProfileById;
+  }
+
+  return null;
 }

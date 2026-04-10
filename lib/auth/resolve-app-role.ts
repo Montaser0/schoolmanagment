@@ -20,41 +20,27 @@ type LegacyUserRow = Record<string, unknown> & {
 };
 
 /**
- * المصدر الرسمي للتطبيق هو `public.profiles.role` (انظر schame.md).
- * إن وُجد جدول `public.users` قديماً، نحاول قراءة الدور منه كاحتياطي لتوجيه لوحة التحكم فقط.
- * ميزات مثل ربط المدرسة ما زالت تحتاج صفاً في `profiles` (مثل school_id).
+ * المصدر الرسمي للدور هو `public.users.role`.
+ * نحافظ على fallback اختياري لـ `public.profiles.role` للتوافق مع بيئات أقدم فقط.
  */
 export async function resolveAppRole(
   supabase: SupabaseClient,
   userId: string,
   userEmail?: string | null,
 ): Promise<AppUserRole | null> {
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("role")
-    .eq("id", userId)
-    .maybeSingle();
-
-  const fromProfile = normalizeRole(profile?.role);
-  if (fromProfile) return fromProfile;
-
-  const { data: legacy, error } = await supabase
+  const { data: userById, error: byIdError } = await supabase
     .from("users")
     .select("*")
     .eq("id", userId)
     .maybeSingle();
 
-  if (error) {
-    return null;
-  }
-
-  const row = legacy as LegacyUserRow | null;
-  if (row) {
+  if (!byIdError) {
+    const row = userById as LegacyUserRow | null;
     const byIdRole =
-      normalizeRole(row.role) ??
-      normalizeRole(row.type) ??
-      normalizeRole(row.user_role) ??
-      normalizeRole(row.userRole) ??
+      normalizeRole(row?.role) ??
+      normalizeRole(row?.type) ??
+      normalizeRole(row?.user_role) ??
+      normalizeRole(row?.userRole) ??
       null;
 
     if (byIdRole) return byIdRole;
@@ -65,26 +51,32 @@ export async function resolveAppRole(
   const normalizedEmail = userEmail.trim().toLowerCase();
   if (!normalizedEmail) return null;
 
-  // احتياطي إضافي: بعض المشاريع القديمة خزنت users.id بشكل لا يطابق auth.users.id،
-  // لذا نحاول المطابقة على البريد.
-  const { data: legacyByEmail, error: emailLookupError } = await supabase
+  const { data: userByEmail, error: byEmailError } = await supabase
     .from("users")
     .select("*")
     .eq("email", normalizedEmail)
     .maybeSingle();
 
-  if (emailLookupError) {
-    return null;
+  if (!byEmailError) {
+    const emailRow = userByEmail as LegacyUserRow | null;
+    const roleByEmail =
+      normalizeRole(emailRow?.role) ??
+      normalizeRole(emailRow?.type) ??
+      normalizeRole(emailRow?.user_role) ??
+      normalizeRole(emailRow?.userRole) ??
+      null;
+
+    if (roleByEmail) return roleByEmail;
   }
 
-  const emailRow = legacyByEmail as LegacyUserRow | null;
-  if (!emailRow) return null;
+  // توافق اختياري مع بيئات تستخدم profiles.
+  const { data: profileById, error: profileByIdError } = await supabase
+    .from("profiles")
+    .select("role")
+    .eq("id", userId)
+    .maybeSingle();
 
-  return (
-    normalizeRole(emailRow.role) ??
-    normalizeRole(emailRow.type) ??
-    normalizeRole(emailRow.user_role) ??
-    normalizeRole(emailRow.userRole) ??
-    null
-  );
+  if (profileByIdError) return null;
+
+  return normalizeRole(profileById?.role);
 }
