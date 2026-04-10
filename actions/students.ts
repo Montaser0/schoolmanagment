@@ -52,6 +52,8 @@ export type CreateStudentInput = {
   classId?: string | null;
   gender: GenderType;
   baseTuition?: number;
+  /** عندما يكون القسط الأساسي أكبر من صفر يُنشأ تلقائياً صف في installments بهذا تاريخ الاستحقاق. */
+  installmentDueDate?: string;
   guardianPhone?: string | null;
   address?: string | null;
   status?: StudentStatus;
@@ -272,8 +274,19 @@ async function getAuthContext(): Promise<AuthContext> {
 function revalidateStudentsViews() {
   revalidatePath("/staff/students");
   revalidatePath("/staff/studentlist");
+  revalidatePath("/staff/student-installments");
   revalidatePath("/staff");
   revalidatePath("/admin");
+}
+
+/** YYYY-MM-DD صالح أو null */
+function installmentDueDateStringOrNull(value: string | undefined): string | null {
+  const v = value?.trim();
+  if (!v) return null;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(v)) return null;
+  const d = new Date(`${v}T00:00:00Z`);
+  if (Number.isNaN(d.getTime())) return null;
+  return v.slice(0, 10);
 }
 
 export async function createStudent(input: CreateStudentInput): Promise<ActionResult> {
@@ -295,24 +308,64 @@ export async function createStudent(input: CreateStudentInput): Promise<ActionRe
   const auth = await getAuthContext();
   if (!auth.ok) return { success: false, message: auth.message };
 
-  const supabase = await createClient();
-  const { error } = await supabase.from("students").insert({
-    school_id: auth.schoolId,
-    full_name: fullName,
-    class_id: classId,
-    gender: input.gender,
-    base_tuition: baseTuition,
-    guardian_phone: guardianPhone,
-    address,
-    status,
-  });
+  if (baseTuition > 0) {
+    const due = installmentDueDateStringOrNull(input.installmentDueDate);
+    if (!due) {
+      return {
+        success: false,
+        message: "عند إدخال قسط أساسي أكبر من صفر يجب تحديد تاريخ استحقاق القسط الأول.",
+      };
+    }
+  }
 
-  if (error) {
-    return { success: false, message: error.message ?? "فشل إضافة الطالب." };
+  const supabase = await createClient();
+  const { data: inserted, error } = await supabase
+    .from("students")
+    .insert({
+      school_id: auth.schoolId,
+      full_name: fullName,
+      class_id: classId,
+      gender: input.gender,
+      base_tuition: baseTuition,
+      guardian_phone: guardianPhone,
+      address,
+      status,
+    })
+    .select("id")
+    .single();
+
+  if (error || !inserted?.id) {
+    return { success: false, message: error?.message ?? "فشل إضافة الطالب." };
+  }
+
+  const newStudentId = inserted.id as string;
+
+  if (baseTuition > 0) {
+    const due = installmentDueDateStringOrNull(input.installmentDueDate)!;
+    const { error: instError } = await supabase.from("installments").insert({
+      school_id: auth.schoolId,
+      student_id: newStudentId,
+      total_amount: baseTuition,
+      due_date: due,
+    });
+
+    if (instError) {
+      await supabase.from("students").delete().eq("id", newStudentId).eq("school_id", auth.schoolId);
+      return {
+        success: false,
+        message: instError.message ?? "فشل إنشاء القسط المرتبط بالطالب.",
+      };
+    }
   }
 
   revalidateStudentsViews();
-  return { success: true, message: "تمت إضافة الطالب بنجاح." };
+  return {
+    success: true,
+    message:
+      baseTuition > 0
+        ? "تمت إضافة الطالب وإنشاء قسطه الأول بنفس مبلغ القسط الأساسي."
+        : "تمت إضافة الطالب بنجاح.",
+  };
 }
 
 export async function updateStudent(input: UpdateStudentInput): Promise<ActionResult> {

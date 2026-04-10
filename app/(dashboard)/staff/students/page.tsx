@@ -1,6 +1,7 @@
 import { createStudent } from "@/actions/students";
 import { resolveSchoolId } from "@/lib/auth/resolve-school-id";
 import { createClient } from "@/lib/supabase/server";
+import Link from "next/link";
 import { redirect } from "next/navigation";
 
 type StudentsPageProps = {
@@ -62,6 +63,7 @@ export default async function StaffStudentsPage({ searchParams }: StudentsPagePr
     const guardianPhone = asNullableText(formData.get("guardianPhone"));
     const address = asNullableText(formData.get("address"));
     const baseTuition = asNullableNumber(formData.get("baseTuition"));
+    const installmentDueDate = asNullableText(formData.get("installmentDueDate"));
     const genderValue = String(formData.get("gender") ?? "male") as "male" | "female";
 
     const result = await createStudent({
@@ -69,6 +71,7 @@ export default async function StaffStudentsPage({ searchParams }: StudentsPagePr
       classId: selectedClassId,
       gender: genderValue,
       baseTuition,
+      installmentDueDate: installmentDueDate ?? undefined,
       guardianPhone,
       address,
       status: "active",
@@ -82,6 +85,12 @@ export default async function StaffStudentsPage({ searchParams }: StudentsPagePr
       <div className="space-y-2">
         <h1 className="text-2xl font-bold">إضافة طالب</h1>
         <p className="text-sm text-muted-foreground">تسجيل طالب جديد في مدرستك.</p>
+        <p className="text-xs text-muted-foreground">
+          متابعة الأقساط والدفعات:{" "}
+          <Link href="/staff/student-installments" className="underline hover:text-foreground">
+            أقساط ودفعات
+          </Link>
+        </p>
       </div>
 
       {pageMessage ? (
@@ -154,6 +163,24 @@ export default async function StaffStudentsPage({ searchParams }: StudentsPagePr
               defaultValue="0"
               className="w-full rounded-md border bg-background px-3 py-2 text-sm outline-none focus:border-primary"
             />
+            <p className="text-xs text-muted-foreground leading-relaxed">
+              إذا كان أكبر من صفر، يُنشأ تلقائياً قسط في النظام بنفس المبلغ؛ يجب تعبئة تاريخ الاستحقاق أدناه.
+            </p>
+          </div>
+          <div className="space-y-2 md:col-span-2">
+            <label htmlFor="installmentDueDate" className="text-sm font-medium">
+              تاريخ استحقاق القسط الأول
+            </label>
+            <input
+              id="installmentDueDate"
+              name="installmentDueDate"
+              type="date"
+              defaultValue={new Date().toISOString().slice(0, 10)}
+              className="w-full rounded-md border bg-background px-3 py-2 text-sm outline-none focus:border-primary"
+            />
+            <p className="text-xs text-muted-foreground">
+              يُستخدم فقط عندما يكون القسط الأساسي أكبر من صفر. تظهر حالة السداد في «أقساط ودفعات».
+            </p>
           </div>
           <div className="space-y-2">
             <label htmlFor="guardianPhone" className="text-sm font-medium">

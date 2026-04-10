@@ -15,6 +15,7 @@ const staffMenuItems = [
   { href: "/staff/class", label: "الصفوف" },
   { href: "/staff/students", label: "اضافة طالب" },
   { href: "/staff/studentlist", label: "قائمة الطلاب" },
+  { href: "/staff/student-installments", label: "أقساط ودفعات" },
   { href: "/staff/addteachers", label: "إضافة معلم" },
   { href: "/staff/teacherslist", label: "قائمة المعلمين" },
   { href: "/staff/expenses", label: "المصاريف" },
