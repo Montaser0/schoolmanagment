@@ -11,6 +11,9 @@ export default {
   theme: {
     extend: {
       colors: {
+        /** ألوان لوحة الموظف والرسوم (كانت تُستخدم كـ bg-sky / bg-Yellow بدون تعريف) */
+        sky: "#C3EBFA",
+        Yellow: "#FAE27C",
         background: "hsl(var(--background))",
         foreground: "hsl(var(--foreground))",
         card: {
@@ -56,6 +59,10 @@ export default {
         lg: "var(--radius)",
         md: "calc(var(--radius) - 2px)",
         sm: "calc(var(--radius) - 4px)",
+      },
+      /** يطابق `text-md` المستخدم في EventCalender (ليس افتراضياً في Tailwind) */
+      fontSize: {
+        md: ["1rem", { lineHeight: "1.5rem" }],
       },
     },
   },
