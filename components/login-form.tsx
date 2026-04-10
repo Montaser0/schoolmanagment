@@ -44,7 +44,7 @@ export function LoginForm({
 
       if (!role) {
         throw new Error(
-          "لم يُعثر على دورك في النظام. تأكد من وجود سجل في جدول profiles (أو users) مرتبط بنفس معرّف المستخدم في auth، وأن الحقل role/type يحتوي owner أو staff.",
+          "لم يُعثر على دورك في النظام. تأكد من وجود سجل في جدول users مرتبط بنفس معرّف المستخدم في auth، وأن الحقل role/type يحتوي owner أو staff.",
         );
       }
 

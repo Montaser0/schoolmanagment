@@ -196,7 +196,7 @@ alter table public.teacher_attendance
 -- =========================================================
 -- 4) INDEXES (PERFORMANCE)
 -- =========================================================
-create index if not exists idx_profiles_school on public.profiles(school_id);
+create index if not exists idx_users_school on public.users(school_id);
 create index if not exists idx_students_school on public.students(school_id);
 create index if not exists idx_students_class on public.students(class_id);
 create index if not exists idx_teachers_school on public.teachers(school_id);
@@ -217,7 +217,7 @@ language sql
 stable
 as $$
   select p.school_id
-  from public.profiles p
+  from public.users p
   where p.id = auth.uid()
   limit 1;
 $$;
@@ -228,7 +228,7 @@ language sql
 stable
 as $$
   select p.role
-  from public.profiles p
+  from public.users p
   where p.id = auth.uid()
   limit 1;
 $$;
@@ -245,7 +245,7 @@ $$;
 -- 6) RLS
 -- =========================================================
 alter table public.schools enable row level security;
-alter table public.profiles enable row level security;
+alter table public.users enable row level security;
 alter table public.classes enable row level security;
 alter table public.students enable row level security;
 alter table public.teachers enable row level security;
@@ -269,24 +269,24 @@ create policy schools_update_owner_policy on public.schools
 for update using (owner_id = auth.uid())
 with check (owner_id = auth.uid());
 
--- profiles
-drop policy if exists profiles_select_policy on public.profiles;
-create policy profiles_select_policy on public.profiles
+-- users
+drop policy if exists users_select_policy on public.users;
+create policy users_select_policy on public.users
 for select using (school_id = public.current_user_school_id());
 
-drop policy if exists profiles_update_self_policy on public.profiles;
-create policy profiles_update_self_policy on public.profiles
+drop policy if exists users_update_self_policy on public.users;
+create policy users_update_self_policy on public.users
 for update using (id = auth.uid())
 with check (id = auth.uid());
 
-drop policy if exists profiles_owner_insert_policy on public.profiles;
-create policy profiles_owner_insert_policy on public.profiles
+drop policy if exists users_owner_insert_policy on public.users;
+create policy users_owner_insert_policy on public.users
 for insert with check (
   public.is_owner() and school_id = public.current_user_school_id()
 );
 
-drop policy if exists profiles_owner_update_policy on public.profiles;
-create policy profiles_owner_update_policy on public.profiles
+drop policy if exists users_owner_update_policy on public.users;
+create policy users_owner_update_policy on public.users
 for update using (
   public.is_owner() and school_id = public.current_user_school_id()
 )
@@ -343,7 +343,7 @@ for all using (school_id = public.current_user_school_id())
 with check (school_id = public.current_user_school_id());
 
 -- =========================================================
--- 7) ONBOARDING RPC (CREATE SCHOOL + OWNER PROFILE)
+-- 7) ONBOARDING RPC (CREATE SCHOOL + OWNER USER)
 -- =========================================================
 create or replace function public.create_school_for_owner(
   p_school_name text,
@@ -364,15 +364,15 @@ begin
     raise exception 'Not authenticated';
   end if;
 
-  if exists (select 1 from public.profiles where id = v_user_id) then
-    raise exception 'Profile already exists for this user';
+  if exists (select 1 from public.users where id = v_user_id) then
+    raise exception 'User row already exists for this user';
   end if;
 
   insert into public.schools (name, owner_id, subscription_plan)
   values (p_school_name, v_user_id, p_plan)
   returning id into v_school_id;
 
-  insert into public.profiles (id, school_id, role)
+  insert into public.users (id, school_id, role)
   values (v_user_id, v_school_id, 'owner');
 
   return v_school_id;
@@ -443,3 +443,111 @@ select
     - coalesce((select sum(e.amount) from public.expenses e where e.school_id = s.id), 0)
   )::numeric(12,2) as net_profit
 from public.schools s;
+
+
+
+create or replace function public.sync_owner_user_on_school_insert()
+returns trigger
+language plpgsql
+security definer
+set search_path = public, auth
+as $$
+declare
+  v_owner_email text;
+begin
+  select au.email
+  into v_owner_email
+  from auth.users au
+  where au.id = new.owner_id
+  limit 1;
+
+  update public.users
+  set
+    school_id = new.id,
+    role = 'staff'
+  where id = new.owner_id;
+
+  if not found then
+    insert into public.users (id, email, role, school_id)
+    values (new.owner_id, v_owner_email, 'staff', new.id);
+  end if;
+
+  return new;
+end;
+$$;
+
+-- Fix runtime error: relation "public.profiles" does not exist
+-- Run this script in Supabase SQL editor (or psql) against your current DB.
+
+begin;
+
+-- 1) Replace helper functions used by RLS to read from public.users.
+create or replace function public.current_user_school_id()
+returns uuid
+language sql
+stable
+as $$
+  select u.school_id
+  from public.users u
+  where u.id = auth.uid()
+  limit 1;
+$$;
+
+create or replace function public.current_user_role()
+returns public.user_role
+language sql
+stable
+as $$
+  select u.role
+  from public.users u
+  where u.id = auth.uid()
+  limit 1;
+$$;
+
+create or replace function public.is_owner()
+returns boolean
+language sql
+stable
+as $$
+  select coalesce(public.current_user_role() = 'owner', false);
+$$;
+
+-- 2) Ensure onboarding RPC no longer writes to public.profiles.
+create or replace function public.create_school_for_owner(
+  p_school_name text,
+  p_plan public.subscription_type default 'trial'
+)
+returns uuid
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_user_id uuid;
+  v_school_id uuid;
+begin
+  v_user_id := auth.uid();
+
+  if v_user_id is null then
+    raise exception 'Not authenticated';
+  end if;
+
+  if exists (select 1 from public.users where id = v_user_id) then
+    raise exception 'User row already exists for this user';
+  end if;
+
+  insert into public.schools (name, owner_id, subscription_plan)
+  values (p_school_name, v_user_id, p_plan)
+  returning id into v_school_id;
+
+  insert into public.users (id, email, full_name, role, school_id)
+  values (v_user_id, null, null, 'owner', v_school_id);
+
+  return v_school_id;
+end;
+$$;
+
+-- 3) Recreate users index used by school-scoped lookups.
+create index if not exists idx_users_school on public.users(school_id);
+
+commit;

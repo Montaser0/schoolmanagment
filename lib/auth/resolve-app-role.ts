@@ -21,7 +21,6 @@ type LegacyUserRow = Record<string, unknown> & {
 
 /**
  * المصدر الرسمي للدور هو `public.users.role`.
- * نحافظ على fallback اختياري لـ `public.profiles.role` للتوافق مع بيئات أقدم فقط.
  */
 export async function resolveAppRole(
   supabase: SupabaseClient,
@@ -68,15 +67,5 @@ export async function resolveAppRole(
 
     if (roleByEmail) return roleByEmail;
   }
-
-  // توافق اختياري مع بيئات تستخدم profiles.
-  const { data: profileById, error: profileByIdError } = await supabase
-    .from("profiles")
-    .select("role")
-    .eq("id", userId)
-    .maybeSingle();
-
-  if (profileByIdError) return null;
-
-  return normalizeRole(profileById?.role);
+  return null;
 }

@@ -35,17 +35,5 @@ export async function resolveSchoolId(
   const fromUsersByEmail = (userByEmail as SchoolRow | null)?.school_id ?? null;
   if (fromUsersByEmail) return fromUsersByEmail;
 
-  // توافق اختياري إذا وُجد جدول profiles في بعض البيئات.
-  const { data: profileById, error: profileByIdError } = await supabase
-    .from("profiles")
-    .select("school_id")
-    .eq("id", userId)
-    .maybeSingle();
-
-  if (!profileByIdError) {
-    const fromProfileById = (profileById as SchoolRow | null)?.school_id ?? null;
-    if (fromProfileById) return fromProfileById;
-  }
-
   return null;
 }
