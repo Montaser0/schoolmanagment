@@ -15,6 +15,8 @@ const staffMenuItems = [
   { href: "/staff/class", label: "الصفوف" },
   { href: "/staff/students", label: "اضافة طالب" },
   { href: "/staff/studentlist", label: "قائمة الطلاب" },
+  { href: "/staff/addteachers", label: "إضافة معلم" },
+  { href: "/staff/teacherslist", label: "قائمة المعلمين" },
 ];
 
 export default async function StaffLayout({ children }: StaffLayoutProps) {

@@ -4,8 +4,6 @@ import { revalidatePath } from "next/cache";
 import { resolveSchoolId } from "@/lib/auth/resolve-school-id";
 import { createClient } from "@/lib/supabase/server";
 
-type GenderType = "male" | "female";
-type StudentStatus = "active" | "withdrawn";
 type AttendanceStatus = "present" | "absent";
 type AlertLevel = "none" | "medium" | "high";
 
@@ -17,66 +15,54 @@ type AuthContext =
   | { ok: true; userId: string; schoolId: string }
   | { ok: false; message: string };
 
-type StudentRow = {
+/** صف من جدول teachers حسب schame.md: full_name, phone, salary, subject */
+type TeacherRow = {
   id: string;
   full_name: string;
-  class_id: string | null;
-  gender: GenderType;
-  base_tuition: number | string;
-  guardian_phone: string | null;
-  address: string | null;
-  status: StudentStatus;
+  phone: string | null;
+  salary: number | string;
+  subject: string | null;
   created_at: string;
-  classes?: { name: string } | { name: string }[] | null;
 };
 
-type InstallmentRow = {
+type TeacherInstallmentRow = {
   id: string;
-  student_id: string;
+  teacher_id: string;
   total_amount: number | string;
   due_date: string;
 };
 
-type PaymentRow = {
+type TeacherPaymentRow = {
   installment_id: string | null;
   amount: number | string;
 };
 
-type AttendanceRow = {
-  student_id: string;
+type TeacherAttendanceRow = {
+  teacher_id: string;
   status: AttendanceStatus;
 };
 
-export type CreateStudentInput = {
+export type CreateTeacherInput = {
   fullName: string;
-  classId?: string | null;
-  gender: GenderType;
-  baseTuition?: number;
-  guardianPhone?: string | null;
-  address?: string | null;
-  status?: StudentStatus;
+  phone?: string | null;
+  salary?: number;
+  subject?: string | null;
 };
 
-export type UpdateStudentInput = {
+export type UpdateTeacherInput = {
   id: string;
   fullName?: string;
-  classId?: string | null;
-  gender?: GenderType;
-  baseTuition?: number;
-  guardianPhone?: string | null;
-  address?: string | null;
-  status?: StudentStatus;
+  phone?: string | null;
+  salary?: number;
+  subject?: string | null;
 };
 
-export type DeleteStudentInput = {
+export type DeleteTeacherInput = {
   id: string;
 };
 
-export type StudentFilters = {
+export type TeacherFilters = {
   query?: string;
-  classId?: string;
-  gender?: GenderType;
-  status?: StudentStatus;
   hasLatePayments?: boolean;
   alertLevel?: AlertLevel;
   attendanceFrom?: string;
@@ -84,38 +70,34 @@ export type StudentFilters = {
   limit?: number;
 };
 
-export type UpsertAttendanceInput = {
-  studentId: string;
+export type UpsertTeacherAttendanceInput = {
+  teacherId: string;
   attendanceDate: string;
   status: AttendanceStatus;
 };
 
-export type BackfillAbsentUnmarkedInput = {
+export type BackfillTeacherAbsentUnmarkedInput = {
   attendanceDate: string;
-  studentIds: string[];
+  teacherIds: string[];
 };
 
-export type BackfillAbsentUnmarkedResult =
+export type BackfillTeacherAbsentUnmarkedResult =
   | { success: true; message: string; filled: number }
   | { success: false; message: string; filled: number };
 
-export type StudentAttendanceFilter = {
-  studentId: string;
+export type TeacherAttendanceFilter = {
+  teacherId: string;
   from?: string;
   to?: string;
   status?: AttendanceStatus;
 };
 
-export type StudentListItem = {
+export type TeacherListItem = {
   id: string;
   fullName: string;
-  classId: string | null;
-  className: string | null;
-  gender: GenderType;
-  baseTuition: number;
-  guardianPhone: string | null;
-  address: string | null;
-  status: StudentStatus;
+  phone: string | null;
+  salary: number;
+  subject: string | null;
   createdAt: string;
   attendance: {
     presentCount: number;
@@ -130,27 +112,27 @@ export type StudentListItem = {
   };
 };
 
-export type ListStudentsResult =
+export type ListTeachersResult =
   | {
       success: true;
-      students: StudentListItem[];
+      teachers: TeacherListItem[];
       total: number;
       message: string;
     }
   | {
       success: false;
-      students: [];
+      teachers: [];
       total: 0;
       message: string;
     };
 
-export type StudentAttendanceResult =
+export type TeacherAttendanceResult =
   | {
       success: true;
       message: string;
       rows: Array<{
         id: string;
-        studentId: string;
+        teacherId: string;
         attendanceDate: string;
         status: AttendanceStatus;
         createdAt: string;
@@ -195,7 +177,6 @@ function utcTodayDateString(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
-/** تاريخ تقويمي سابق عن «اليوم» بتوقيت UTC (نفس تنسيق الحقول date في الواجهة). */
 function isStrictlyBeforeTodayDate(dateText: string): boolean {
   if (!parseDateOnly(dateText)) return false;
   const day = dateText.trim().slice(0, 10);
@@ -269,90 +250,75 @@ async function getAuthContext(): Promise<AuthContext> {
   };
 }
 
-function revalidateStudentsViews() {
-  revalidatePath("/staff/students");
-  revalidatePath("/staff/studentlist");
+function revalidateTeachersViews() {
+  revalidatePath("/staff/addteachers");
+  revalidatePath("/staff/teacherslist");
   revalidatePath("/staff");
   revalidatePath("/admin");
 }
 
-export async function createStudent(input: CreateStudentInput): Promise<ActionResult> {
+export async function createTeacher(input: CreateTeacherInput): Promise<ActionResult> {
   const fullName = input.fullName?.trim();
-  const baseTuition = toPositiveAmount(input.baseTuition);
-  const classId = normalizeNullableText(input.classId);
-  const guardianPhone = normalizeNullableText(input.guardianPhone);
-  const address = normalizeNullableText(input.address);
-  const status: StudentStatus = input.status ?? "active";
+  const salary = toPositiveAmount(input.salary);
+  const phone = normalizeNullableText(input.phone);
+  const subject = normalizeNullableText(input.subject);
 
   if (!fullName) {
-    return { success: false, message: "اسم الطالب مطلوب." };
+    return { success: false, message: "اسم المعلم مطلوب." };
   }
 
-  if (baseTuition < 0) {
-    return { success: false, message: "قيمة القسط الأساسي غير صحيحة." };
+  if (salary < 0) {
+    return { success: false, message: "قيمة الراتب غير صحيحة." };
   }
 
   const auth = await getAuthContext();
   if (!auth.ok) return { success: false, message: auth.message };
 
   const supabase = await createClient();
-  const { error } = await supabase.from("students").insert({
+  const { error } = await supabase.from("teachers").insert({
     school_id: auth.schoolId,
     full_name: fullName,
-    class_id: classId,
-    gender: input.gender,
-    base_tuition: baseTuition,
-    guardian_phone: guardianPhone,
-    address,
-    status,
+    phone,
+    salary,
+    subject,
   });
 
   if (error) {
-    return { success: false, message: error.message ?? "فشل إضافة الطالب." };
+    return { success: false, message: error.message ?? "فشل إضافة المعلم." };
   }
 
-  revalidateStudentsViews();
-  return { success: true, message: "تمت إضافة الطالب بنجاح." };
+  revalidateTeachersViews();
+  return { success: true, message: "تمت إضافة المعلم بنجاح." };
 }
 
-export async function updateStudent(input: UpdateStudentInput): Promise<ActionResult> {
-  const studentId = input.id?.trim();
-  if (!studentId) {
-    return { success: false, message: "معرّف الطالب مطلوب." };
+export async function updateTeacher(input: UpdateTeacherInput): Promise<ActionResult> {
+  const teacherId = input.id?.trim();
+  if (!teacherId) {
+    return { success: false, message: "معرّف المعلم مطلوب." };
   }
 
   const updates: Record<string, unknown> = {};
 
   if (input.fullName !== undefined) {
     const fullName = input.fullName.trim();
-    if (!fullName) return { success: false, message: "اسم الطالب غير صالح." };
+    if (!fullName) return { success: false, message: "اسم المعلم غير صالح." };
     updates.full_name = fullName;
   }
 
-  if (input.classId !== undefined) {
-    updates.class_id = normalizeNullableText(input.classId);
-  }
-
-  if (input.gender !== undefined) updates.gender = input.gender;
-
-  if (input.baseTuition !== undefined) {
-    const baseTuition = toPositiveAmount(input.baseTuition);
-    if (baseTuition < 0) {
-      return { success: false, message: "قيمة القسط الأساسي غير صحيحة." };
+  if (input.salary !== undefined) {
+    const salary = toPositiveAmount(input.salary);
+    if (salary < 0) {
+      return { success: false, message: "قيمة الراتب غير صحيحة." };
     }
-    updates.base_tuition = baseTuition;
+    updates.salary = salary;
   }
 
-  if (input.guardianPhone !== undefined) {
-    updates.guardian_phone = normalizeNullableText(input.guardianPhone);
+  if (input.phone !== undefined) {
+    updates.phone = normalizeNullableText(input.phone);
   }
 
-  if (input.address !== undefined) {
-    updates.address = normalizeNullableText(input.address);
-  }
-
-  if (input.status !== undefined) {
-    updates.status = input.status;
+  if (input.subject !== undefined) {
+    updates.subject = normalizeNullableText(input.subject);
   }
 
   if (Object.keys(updates).length === 0) {
@@ -364,23 +330,23 @@ export async function updateStudent(input: UpdateStudentInput): Promise<ActionRe
 
   const supabase = await createClient();
   const { error } = await supabase
-    .from("students")
+    .from("teachers")
     .update(updates)
-    .eq("id", studentId)
+    .eq("id", teacherId)
     .eq("school_id", auth.schoolId);
 
   if (error) {
-    return { success: false, message: error.message ?? "فشل تعديل بيانات الطالب." };
+    return { success: false, message: error.message ?? "فشل تعديل بيانات المعلم." };
   }
 
-  revalidateStudentsViews();
-  return { success: true, message: "تم تعديل بيانات الطالب بنجاح." };
+  revalidateTeachersViews();
+  return { success: true, message: "تم تعديل بيانات المعلم بنجاح." };
 }
 
-export async function deleteStudent(input: DeleteStudentInput): Promise<ActionResult> {
-  const studentId = input.id?.trim();
-  if (!studentId) {
-    return { success: false, message: "معرّف الطالب مطلوب." };
+export async function deleteTeacher(input: DeleteTeacherInput): Promise<ActionResult> {
+  const teacherId = input.id?.trim();
+  if (!teacherId) {
+    return { success: false, message: "معرّف المعلم مطلوب." };
   }
 
   const auth = await getAuthContext();
@@ -388,67 +354,61 @@ export async function deleteStudent(input: DeleteStudentInput): Promise<ActionRe
 
   const supabase = await createClient();
   const { error } = await supabase
-    .from("students")
+    .from("teachers")
     .delete()
-    .eq("id", studentId)
+    .eq("id", teacherId)
     .eq("school_id", auth.schoolId);
 
   if (error) {
-    return { success: false, message: error.message ?? "فشل حذف الطالب." };
+    return { success: false, message: error.message ?? "فشل حذف المعلم." };
   }
 
-  revalidateStudentsViews();
-  return { success: true, message: "تم حذف الطالب بنجاح." };
+  revalidateTeachersViews();
+  return { success: true, message: "تم حذف المعلم بنجاح." };
 }
 
-export async function listStudents(filters: StudentFilters = {}): Promise<ListStudentsResult> {
+export async function listTeachers(filters: TeacherFilters = {}): Promise<ListTeachersResult> {
   const auth = await getAuthContext();
   if (!auth.ok) {
-    return { success: false, students: [], total: 0, message: auth.message };
+    return { success: false, teachers: [], total: 0, message: auth.message };
   }
 
   const limit = Math.min(Math.max(filters.limit ?? 200, 1), 1000);
   const supabase = await createClient();
 
   let query = supabase
-    .from("students")
-    .select(
-      "id,full_name,class_id,gender,base_tuition,guardian_phone,address,status,created_at,classes!students_class_school_fk(name)",
-    )
+    .from("teachers")
+    .select("id,full_name,phone,salary,subject,created_at")
     .eq("school_id", auth.schoolId)
     .limit(limit)
     .order("created_at", { ascending: false });
 
-  if (filters.classId) query = query.eq("class_id", filters.classId);
-  if (filters.gender) query = query.eq("gender", filters.gender);
-  if (filters.status) query = query.eq("status", filters.status);
-
   if (filters.query?.trim()) {
     const q = filters.query.trim();
-    query = query.or(`full_name.ilike.%${q}%,guardian_phone.ilike.%${q}%`);
+    query = query.or(`full_name.ilike.%${q}%,phone.ilike.%${q}%,subject.ilike.%${q}%`);
   }
 
-  const { data: studentRows, error: studentsError } = await query;
-  if (studentsError) {
+  const { data: teacherRows, error: teachersError } = await query;
+  if (teachersError) {
     return {
       success: false,
-      students: [],
+      teachers: [],
       total: 0,
-      message: studentsError.message ?? "فشل تحميل بيانات الطلاب.",
+      message: teachersError.message ?? "فشل تحميل بيانات المعلمين.",
     };
   }
 
-  const students = (studentRows ?? []) as StudentRow[];
-  if (students.length === 0) {
+  const teachers = (teacherRows ?? []) as TeacherRow[];
+  if (teachers.length === 0) {
     return {
       success: true,
-      students: [],
+      teachers: [],
       total: 0,
-      message: "لا يوجد طلاب مطابقون للبحث.",
+      message: "لا يوجد معلمون مطابقون للبحث.",
     };
   }
 
-  const studentIds = students.map((s) => s.id);
+  const teacherIds = teachers.map((t) => t.id);
   const attendanceFrom = filters.attendanceFrom ?? new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10);
   const attendanceTo = filters.attendanceTo ?? new Date().toISOString().slice(0, 10);
 
@@ -458,20 +418,20 @@ export async function listStudents(filters: StudentFilters = {}): Promise<ListSt
     { data: attendanceRows, error: attendanceError },
   ] = await Promise.all([
     supabase
-      .from("installments")
-      .select("id,student_id,total_amount,due_date")
+      .from("teacher_installments")
+      .select("id,teacher_id,total_amount,due_date")
       .eq("school_id", auth.schoolId)
-      .in("student_id", studentIds),
+      .in("teacher_id", teacherIds),
     supabase
-      .from("payments")
+      .from("teacher_payments")
       .select("installment_id,amount")
       .eq("school_id", auth.schoolId)
-      .in("student_id", studentIds),
+      .in("teacher_id", teacherIds),
     supabase
-      .from("student_attendance")
-      .select("student_id,status")
+      .from("teacher_attendance")
+      .select("teacher_id,status")
       .eq("school_id", auth.schoolId)
-      .in("student_id", studentIds)
+      .in("teacher_id", teacherIds)
       .gte("attendance_date", attendanceFrom)
       .lte("attendance_date", attendanceTo),
   ]);
@@ -481,32 +441,47 @@ export async function listStudents(filters: StudentFilters = {}): Promise<ListSt
   const attendancePermissionDenied = isPermissionDeniedError(attendanceError);
   const financeUnavailable = installmentsPermissionDenied || paymentsPermissionDenied;
 
+  const tableMissing = (err: { message?: string; code?: string } | null | undefined) => {
+    const msg = err?.message?.toLowerCase() ?? "";
+    const code = err?.code?.trim();
+    return code === "42P01" || msg.includes("does not exist") || msg.includes("schema cache");
+  };
+
   if (installmentsError && !installmentsPermissionDenied) {
-    return {
-      success: false,
-      students: [],
-      total: 0,
-      message: installmentsError.message ?? "فشل تحميل بيانات الأقساط.",
-    };
+    if (!tableMissing(installmentsError)) {
+      return {
+        success: false,
+        teachers: [],
+        total: 0,
+        message: installmentsError.message ?? "فشل تحميل بيانات الأقساط.",
+      };
+    }
   }
 
   if (paymentsError && !paymentsPermissionDenied) {
-    return {
-      success: false,
-      students: [],
-      total: 0,
-      message: paymentsError.message ?? "فشل تحميل بيانات الدفعات.",
-    };
+    if (!tableMissing(paymentsError)) {
+      return {
+        success: false,
+        teachers: [],
+        total: 0,
+        message: paymentsError.message ?? "فشل تحميل بيانات الدفعات.",
+      };
+    }
   }
 
   if (attendanceError && !attendancePermissionDenied) {
     return {
       success: false,
-      students: [],
+      teachers: [],
       total: 0,
       message: attendanceError.message ?? "فشل تحميل بيانات الحضور.",
     };
   }
+
+  const financeReallyUnavailable =
+    financeUnavailable ||
+    tableMissing(installmentsError) ||
+    tableMissing(paymentsError);
 
   const installmentMap = new Map<
     string,
@@ -515,15 +490,15 @@ export async function listStudents(filters: StudentFilters = {}): Promise<ListSt
   const attendanceMap = new Map<string, { present: number; absent: number }>();
   const paidByInstallment = new Map<string, number>();
 
-  for (const payment of financeUnavailable ? [] : ((paymentRows ?? []) as PaymentRow[])) {
+  for (const payment of financeReallyUnavailable ? [] : ((paymentRows ?? []) as TeacherPaymentRow[])) {
     if (!payment.installment_id) continue;
     const paid = toNumber(payment.amount);
     const prev = paidByInstallment.get(payment.installment_id) ?? 0;
     paidByInstallment.set(payment.installment_id, prev + paid);
   }
 
-  for (const row of financeUnavailable ? [] : ((installmentRows ?? []) as InstallmentRow[])) {
-    const prev = installmentMap.get(row.student_id) ?? {
+  for (const row of financeReallyUnavailable ? [] : ((installmentRows ?? []) as TeacherInstallmentRow[])) {
+    const prev = installmentMap.get(row.teacher_id) ?? {
       remainingTotal: 0,
       overdueInstallments: 0,
       maxLateDays: 0,
@@ -541,18 +516,17 @@ export async function listStudents(filters: StudentFilters = {}): Promise<ListSt
       prev.maxLateDays = Math.max(prev.maxLateDays, lateDays);
     }
 
-    installmentMap.set(row.student_id, prev);
+    installmentMap.set(row.teacher_id, prev);
   }
 
-  for (const row of (attendanceRows ?? []) as AttendanceRow[]) {
-    const prev = attendanceMap.get(row.student_id) ?? { present: 0, absent: 0 };
+  for (const row of (attendanceRows ?? []) as TeacherAttendanceRow[]) {
+    const prev = attendanceMap.get(row.teacher_id) ?? { present: 0, absent: 0 };
     if (row.status === "present") prev.present += 1;
     if (row.status === "absent") prev.absent += 1;
-    attendanceMap.set(row.student_id, prev);
+    attendanceMap.set(row.teacher_id, prev);
   }
 
-  let mapped: StudentListItem[] = students.map((row) => {
-    const classInfo = Array.isArray(row.classes) ? row.classes[0] : row.classes;
+  let mapped: TeacherListItem[] = teachers.map((row) => {
     const finance = installmentMap.get(row.id) ?? {
       remainingTotal: 0,
       overdueInstallments: 0,
@@ -568,13 +542,9 @@ export async function listStudents(filters: StudentFilters = {}): Promise<ListSt
     return {
       id: row.id,
       fullName: row.full_name,
-      classId: row.class_id,
-      className: classInfo?.name ?? null,
-      gender: row.gender,
-      baseTuition: toNumber(row.base_tuition),
-      guardianPhone: row.guardian_phone,
-      address: row.address,
-      status: row.status,
+      phone: row.phone,
+      salary: toNumber(row.salary),
+      subject: row.subject,
       createdAt: row.created_at,
       attendance: {
         presentCount: attendance.present,
@@ -590,36 +560,36 @@ export async function listStudents(filters: StudentFilters = {}): Promise<ListSt
     };
   });
 
-  if (!financeUnavailable && filters.hasLatePayments === true) {
+  if (!financeReallyUnavailable && filters.hasLatePayments === true) {
     mapped = mapped.filter((row) => row.finance.overdueInstallments > 0);
   }
 
-  if (!financeUnavailable && filters.hasLatePayments === false) {
+  if (!financeReallyUnavailable && filters.hasLatePayments === false) {
     mapped = mapped.filter((row) => row.finance.overdueInstallments === 0);
   }
 
-  if (!financeUnavailable && filters.alertLevel) {
+  if (!financeReallyUnavailable && filters.alertLevel) {
     mapped = mapped.filter((row) => row.finance.alertLevel === filters.alertLevel);
   }
 
   return {
     success: true,
-    students: mapped,
+    teachers: mapped,
     total: mapped.length,
-    message: financeUnavailable
-      ? "تم تحميل الطلاب بنجاح، لكن البيانات المالية غير متاحة بسبب الصلاحيات."
-      : "تم تحميل الطلاب بنجاح.",
+    message: financeReallyUnavailable
+      ? "تم تحميل المعلمين بنجاح، لكن البيانات المالية غير متاحة بسبب الصلاحيات أو الجداول غير المُنشأة."
+      : "تم تحميل المعلمين بنجاح.",
   };
 }
 
-export async function upsertStudentAttendance(
-  input: UpsertAttendanceInput,
+export async function upsertTeacherAttendance(
+  input: UpsertTeacherAttendanceInput,
 ): Promise<ActionResult> {
-  const studentId = input.studentId?.trim();
+  const teacherId = input.teacherId?.trim();
   const attendanceDate = input.attendanceDate?.trim();
 
-  if (!studentId) {
-    return { success: false, message: "معرّف الطالب مطلوب." };
+  if (!teacherId) {
+    return { success: false, message: "معرّف المعلم مطلوب." };
   }
 
   if (!parseDateOnly(attendanceDate)) {
@@ -630,15 +600,15 @@ export async function upsertStudentAttendance(
   if (!auth.ok) return { success: false, message: auth.message };
 
   const supabase = await createClient();
-  const { error } = await supabase.from("student_attendance").upsert(
+  const { error } = await supabase.from("teacher_attendance").upsert(
     {
       school_id: auth.schoolId,
-      student_id: studentId,
+      teacher_id: teacherId,
       attendance_date: attendanceDate,
       status: input.status,
     },
     {
-      onConflict: "school_id,student_id,attendance_date",
+      onConflict: "school_id,teacher_id,attendance_date",
     },
   );
 
@@ -646,17 +616,13 @@ export async function upsertStudentAttendance(
     return { success: false, message: error.message ?? "فشل حفظ الحضور/الغياب." };
   }
 
-  revalidateStudentsViews();
+  revalidateTeachersViews();
   return { success: true, message: "تم حفظ الحضور/الغياب بنجاح." };
 }
 
-/**
- * لأيام مضت: يسجّل «غائب» تلقائيًا لكل طالب من القائمة لا يملك صفًا في student_attendance لذلك التاريخ.
- * لا يغيّر الصفوف الموجودة (حاضر/غائب). لا يُنفَّذ لتاريخ اليوم أو المستقبل.
- */
-export async function backfillAbsentForPastUnmarked(
-  input: BackfillAbsentUnmarkedInput,
-): Promise<BackfillAbsentUnmarkedResult> {
+export async function backfillAbsentForPastTeachersUnmarked(
+  input: BackfillTeacherAbsentUnmarkedInput,
+): Promise<BackfillTeacherAbsentUnmarkedResult> {
   const attendanceDate = input.attendanceDate?.trim();
   if (!parseDateOnly(attendanceDate)) {
     return { success: false, message: "تاريخ الحضور غير صالح.", filled: 0 };
@@ -670,16 +636,16 @@ export async function backfillAbsentForPastUnmarked(
     };
   }
 
-  const studentIds = [
+  const teacherIds = [
     ...new Set(
-      (input.studentIds ?? [])
+      (input.teacherIds ?? [])
         .map((id) => id.trim())
         .filter((id) => id.length > 0),
     ),
   ];
 
-  if (studentIds.length === 0) {
-    return { success: true, message: "لا يوجد طلاب للمعالجة.", filled: 0 };
+  if (teacherIds.length === 0) {
+    return { success: true, message: "لا يوجد معلمون للمعالجة.", filled: 0 };
   }
 
   const auth = await getAuthContext();
@@ -687,11 +653,11 @@ export async function backfillAbsentForPastUnmarked(
 
   const supabase = await createClient();
   const { data: existingRows, error: existingError } = await supabase
-    .from("student_attendance")
-    .select("student_id")
+    .from("teacher_attendance")
+    .select("teacher_id")
     .eq("school_id", auth.schoolId)
     .eq("attendance_date", attendanceDate)
-    .in("student_id", studentIds);
+    .in("teacher_id", teacherIds);
 
   if (existingError) {
     return {
@@ -702,26 +668,26 @@ export async function backfillAbsentForPastUnmarked(
   }
 
   const alreadyMarked = new Set(
-    (existingRows ?? []).map((row) => row.student_id as string),
+    (existingRows ?? []).map((row) => row.teacher_id as string),
   );
-  const missingIds = studentIds.filter((id) => !alreadyMarked.has(id));
+  const missingIds = teacherIds.filter((id) => !alreadyMarked.has(id));
 
   if (missingIds.length === 0) {
-    return { success: true, message: "جميع الطلاب لهم سجل لهذا التاريخ.", filled: 0 };
+    return { success: true, message: "جميع المعلمين لهم سجل لهذا التاريخ.", filled: 0 };
   }
 
   const chunkSize = 150;
   let filled = 0;
   for (let i = 0; i < missingIds.length; i += chunkSize) {
     const chunk = missingIds.slice(i, i + chunkSize);
-    const rows = chunk.map((student_id) => ({
+    const rows = chunk.map((teacher_id) => ({
       school_id: auth.schoolId,
-      student_id,
+      teacher_id,
       attendance_date: attendanceDate,
       status: "absent" as const,
     }));
 
-    const { error: insertError } = await supabase.from("student_attendance").insert(rows);
+    const { error: insertError } = await supabase.from("teacher_attendance").insert(rows);
     if (insertError) {
       return {
         success: false,
@@ -733,25 +699,25 @@ export async function backfillAbsentForPastUnmarked(
   }
 
   if (filled > 0) {
-    revalidateStudentsViews();
+    revalidateTeachersViews();
   }
 
   return {
     success: true,
     message:
       filled > 0
-        ? `تم تسجيل غياب تلقائي لـ ${filled} طالبًا في ${attendanceDate}.`
+        ? `تم تسجيل غياب تلقائي لـ ${filled} معلمًا في ${attendanceDate}.`
         : "لم يُضف أي سجل.",
     filled,
   };
 }
 
-export async function getStudentAttendance(
-  filter: StudentAttendanceFilter,
-): Promise<StudentAttendanceResult> {
-  const studentId = filter.studentId?.trim();
-  if (!studentId) {
-    return { success: false, rows: [], message: "معرّف الطالب مطلوب." };
+export async function getTeacherAttendance(
+  filter: TeacherAttendanceFilter,
+): Promise<TeacherAttendanceResult> {
+  const teacherId = filter.teacherId?.trim();
+  if (!teacherId) {
+    return { success: false, rows: [], message: "معرّف المعلم مطلوب." };
   }
 
   const auth = await getAuthContext();
@@ -764,10 +730,10 @@ export async function getStudentAttendance(
   }
 
   let query = (await createClient())
-    .from("student_attendance")
-    .select("id,student_id,attendance_date,status,created_at")
+    .from("teacher_attendance")
+    .select("id,teacher_id,attendance_date,status,created_at")
     .eq("school_id", auth.schoolId)
-    .eq("student_id", studentId)
+    .eq("teacher_id", teacherId)
     .gte("attendance_date", from)
     .lte("attendance_date", to)
     .order("attendance_date", { ascending: false });
@@ -788,7 +754,7 @@ export async function getStudentAttendance(
     message: "تم تحميل سجل الحضور/الغياب بنجاح.",
     rows: (data ?? []).map((row) => ({
       id: row.id as string,
-      studentId: row.student_id as string,
+      teacherId: row.teacher_id as string,
       attendanceDate: row.attendance_date as string,
       status: row.status as AttendanceStatus,
       createdAt: row.created_at as string,
