@@ -6,10 +6,15 @@ import {
   listRevenueLedger,
   updateRevenue,
 } from "@/actions/revenues";
+import UserCard from "@/components/component/UserCard";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { resolveSchoolId } from "@/lib/auth/resolve-school-id";
 import { createClient } from "@/lib/supabase/server";
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { AddRevenueDialog } from "./add-revenue-dialog";
 
 type RevenuesPageProps = {
   searchParams?: Promise<{
@@ -72,8 +77,10 @@ export default async function StaffRevenuesPage({ searchParams }: RevenuesPagePr
 
   if (!schoolId) {
     return (
-      <div className="w-full max-w-5xl rounded-lg border border-red-500/30 bg-red-500/10 p-5 text-sm text-red-700">
-        لم يتم العثور على مدرسة مرتبطة بحسابك.
+      <div className="p-4 flex flex-col gap-8" dir="rtl">
+        <div className="rounded-xl border border-amber-500/40 bg-amber-500/10 p-5 text-center text-sm text-amber-900">
+          لم يتم العثور على مدرسة مرتبطة بحسابك.
+        </div>
       </div>
     );
   }
@@ -167,24 +174,38 @@ export default async function StaffRevenuesPage({ searchParams }: RevenuesPagePr
     redirect(buildRedirectUrl(result.success ? "success" : "error", result.message));
   }
 
-  const totalDisplay = totalResult.success ? totalResult.total.toLocaleString("en-US") : null;
+  const defaultRevenueDate = new Date().toISOString().slice(0, 10);
 
   return (
-    <div className="w-full max-w-6xl space-y-6" dir="rtl">
-      <div className="space-y-2">
-        <h1 className="text-2xl font-bold">الإيرادات</h1>
-        <p className="text-sm text-muted-foreground">
-          سجل الإيرادات أدناه يجمع تلقائياً دفعات أقساط الطلاب (عند التسديد من صفحة الأقساط) مع الإيرادات اليدوية التي
-          تُسجَّل في النموذج (تبرعات، دعم، إيجار، …). الملخص المالي يحسب الإجمالي مرة واحدة دون تكرار في قاعدة البيانات.
-        </p>
+    <div className="p-4 flex flex-col gap-8 min-w-0" dir="rtl">
+      <div className="rounded-2xl bg-sky p-5 shadow-sm transition-shadow hover:shadow-md sm:p-6">
+        <div className="space-y-2">
+          <h1 className="text-2xl font-semibold tracking-tight text-foreground">الإيرادات</h1>
+          <p className="text-sm text-gray-600 leading-relaxed">
+            سجل الإيرادات أدناه يجمع تلقائياً دفعات أقساط الطلاب (عند التسديد من صفحة الأقساط) مع الإيرادات اليدوية التي
+            تُسجَّل في النموذج (تبرعات، دعم، إيجار، …). الملخص المالي يحسب الإجمالي مرة واحدة دون تكرار في قاعدة البيانات.
+          </p>
+          <p className="text-xs text-gray-600">
+            <Link
+              href="/staff/student-installments"
+              className="font-medium text-foreground underline-offset-4 hover:underline"
+            >
+              أقساط الطلاب
+            </Link>
+            <span className="mx-1.5 text-muted-foreground">·</span>
+            <Link href="/staff" className="font-medium text-foreground underline-offset-4 hover:underline">
+              لوحة التحكم
+            </Link>
+          </p>
+        </div>
       </div>
 
       {pageMessage ? (
         <div
-          className={`rounded-md border px-4 py-3 text-sm ${
+          className={`rounded-xl border px-4 py-3 text-sm ${
             pageStatus === "success"
-              ? "border-green-500/40 bg-green-500/10 text-green-700"
-              : "border-red-500/40 bg-red-500/10 text-red-700"
+              ? "border-green-500/40 bg-green-500/10 text-green-800"
+              : "border-red-500/40 bg-red-500/10 text-red-800"
           }`}
         >
           {pageMessage}
@@ -192,52 +213,44 @@ export default async function StaffRevenuesPage({ searchParams }: RevenuesPagePr
       ) : null}
 
       {!ledgerResult.success ? (
-        <div className="rounded-md border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-900">
+        <div className="rounded-xl border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-900">
           {ledgerResult.message}
         </div>
       ) : null}
 
-      <div className="grid gap-4 sm:grid-cols-3">
-        <div className="rounded-lg border bg-card p-5 shadow-sm sm:col-span-3">
-          <p className="text-sm font-medium text-muted-foreground">إجمالي إيرادات المدرسة</p>
-          {summaryResult.success ? (
-            <p className="mt-2 text-3xl font-bold tabular-nums">
-              {summaryResult.totalIncome.toLocaleString("en-US")}
-            </p>
+      {!summaryResult.success ? (
+        <div className="rounded-xl border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+          {summaryResult.message}
+        </div>
+      ) : (
+        <div className="flex flex-col gap-3">
+          <div className="flex gap-4 justify-between flex-wrap">
+            <UserCard type="إجمالي إيرادات المدرسة" count={summaryResult.totalIncome} badgeLabel="ملخص مالي" />
+            <UserCard type="منها: دفعات الطلاب" count={summaryResult.paymentsTotal} badgeLabel="أقساط" />
+            <UserCard
+              type="منها: إيرادات يدوية فقط"
+              count={totalResult.success ? totalResult.total : 0}
+              badgeLabel={totalResult.success ? "جدول revenues" : "تعذر الجلب"}
+            />
+          </div>
+          {!totalResult.success ? (
+            <p className="text-sm text-destructive">{totalResult.message}</p>
           ) : (
-            <p className="mt-2 text-sm text-destructive">{summaryResult.message}</p>
-          )}
-          {summaryResult.success ? (
-            <p className="mt-2 text-xs text-muted-foreground leading-relaxed">
+            <p className="text-xs text-muted-foreground leading-relaxed">
               مجموع دفعات الطلاب + الإيرادات الإضافية المسجّلة أدناه (كما في الملخص المالي).
             </p>
-          ) : null}
-        </div>
-        <div className="rounded-lg border bg-card p-5 shadow-sm">
-          <p className="text-sm font-medium text-muted-foreground">منها: دفعات الطلاب</p>
-          {summaryResult.success ? (
-            <p className="mt-2 text-2xl font-bold tabular-nums">
-              {summaryResult.paymentsTotal.toLocaleString("en-US")}
-            </p>
-          ) : (
-            <p className="mt-2 text-sm text-muted-foreground">—</p>
           )}
         </div>
-        <div className="rounded-lg border bg-card p-5 shadow-sm sm:col-span-2">
-          <p className="text-sm font-medium text-muted-foreground">منها: إيرادات يدوية فقط (جدول revenues)</p>
-          {totalResult.success ? (
-            <p className="mt-2 text-2xl font-bold tabular-nums">{totalDisplay}</p>
-          ) : (
-            <p className="mt-2 text-sm text-destructive">{totalResult.message}</p>
-          )}
-        </div>
-      </div>
+      )}
 
       {editing ? (
-        <section className="rounded-lg border border-primary/30 p-5 space-y-4">
+        <section className="rounded-xl border border-primary/35 bg-sky/40 p-4 shadow-sm sm:p-5 space-y-4">
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <h2 className="text-lg font-semibold">تعديل إيراد</h2>
-            <Link href="/staff/revenues" className="text-sm text-muted-foreground hover:text-foreground">
+            <h2 className="text-lg font-semibold text-foreground">تعديل إيراد</h2>
+            <Link
+              href="/staff/revenues"
+              className="text-sm font-medium text-foreground underline-offset-4 hover:underline"
+            >
               إلغاء التعديل
             </Link>
           </div>
@@ -245,23 +258,22 @@ export default async function StaffRevenuesPage({ searchParams }: RevenuesPagePr
             <input type="hidden" name="id" value={editing.id} />
             <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
               <div className="space-y-2 md:col-span-2">
-                <label htmlFor="editTitle" className="text-sm font-medium">
+                <Label htmlFor="editTitle" className="text-muted-foreground">
                   العنوان / الوصف
-                </label>
-                <input
+                </Label>
+                <Input
                   id="editTitle"
                   name="title"
                   required
                   defaultValue={editing.title}
-                  className="w-full rounded-md border bg-background px-3 py-2 text-sm outline-none focus:border-primary"
                   placeholder="مثال: تبرع جهة خيرية، إيجار قاعة…"
                 />
               </div>
               <div className="space-y-2">
-                <label htmlFor="editAmount" className="text-sm font-medium">
+                <Label htmlFor="editAmount" className="text-muted-foreground">
                   المبلغ
-                </label>
-                <input
+                </Label>
+                <Input
                   id="editAmount"
                   name="amount"
                   type="number"
@@ -269,169 +281,112 @@ export default async function StaffRevenuesPage({ searchParams }: RevenuesPagePr
                   step="0.01"
                   required
                   defaultValue={editing.amount}
-                  className="w-full rounded-md border bg-background px-3 py-2 text-sm outline-none focus:border-primary"
                 />
               </div>
               <div className="space-y-2 md:col-span-2">
-                <label htmlFor="editRevenueDate" className="text-sm font-medium">
+                <Label htmlFor="editRevenueDate" className="text-muted-foreground">
                   تاريخ الإيراد
-                </label>
-                <input
+                </Label>
+                <Input
                   id="editRevenueDate"
                   name="revenueDate"
                   type="date"
                   required
                   defaultValue={editing.revenue_date.slice(0, 10)}
-                  className="w-full rounded-md border bg-background px-3 py-2 text-sm outline-none focus:border-primary"
                 />
               </div>
             </div>
-            <button
+            <Button
               type="submit"
-              className="inline-flex items-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:opacity-90"
+              className="rounded-xl bg-Yellow px-4 text-foreground shadow-sm hover:bg-Yellow/90 hover:scale-[1.02] transition-transform"
             >
               حفظ التعديلات
-            </button>
+            </Button>
           </form>
         </section>
       ) : null}
 
-      <section className="rounded-lg border p-5 space-y-4">
-        <h2 className="text-lg font-semibold">إضافة إيراد</h2>
-        <form action={createRevenueAction} className="space-y-4">
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-            <div className="space-y-2 md:col-span-2">
-              <label htmlFor="title" className="text-sm font-medium">
-                العنوان / الوصف
-              </label>
-              <input
-                id="title"
-                name="title"
-                required
-                className="w-full rounded-md border bg-background px-3 py-2 text-sm outline-none focus:border-primary"
-                placeholder="مثال: تبرع، منحة، بيع مستلزمات…"
-              />
-            </div>
-            <div className="space-y-2">
-              <label htmlFor="amount" className="text-sm font-medium">
-                المبلغ
-              </label>
-              <input
-                id="amount"
-                name="amount"
-                type="number"
-                min="0.01"
-                step="0.01"
-                required
-                className="w-full rounded-md border bg-background px-3 py-2 text-sm outline-none focus:border-primary"
-              />
-            </div>
-            <div className="space-y-2 md:col-span-2">
-              <label htmlFor="revenueDate" className="text-sm font-medium">
-                تاريخ الإيراد
-              </label>
-              <input
-                id="revenueDate"
-                name="revenueDate"
-                type="date"
-                defaultValue={new Date().toISOString().slice(0, 10)}
-                className="w-full rounded-md border bg-background px-3 py-2 text-sm outline-none focus:border-primary"
-              />
-            </div>
-          </div>
-          <button
-            type="submit"
-            className="inline-flex items-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:opacity-90"
-          >
-            تسجيل الإيراد
-          </button>
-        </form>
-      </section>
-
-      <section className="rounded-lg border overflow-hidden">
-        <div className="border-b px-5 py-3">
-          <h2 className="text-lg font-semibold">سجل الإيرادات</h2>
-          <p className="text-xs text-muted-foreground mt-1">
+      <section className="rounded-xl border border-muted-foreground/20 bg-muted/20 p-4 sm:p-5">
+        <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="min-w-0 space-y-1">
+            <h2 className="text-lg font-semibold text-foreground">سجل الإيرادات</h2>
             {ledgerResult.success ? (
-              <>
+              <p className="text-xs text-muted-foreground">
                 المعروض: {ledgerItems.length}
                 {ledgerResult.hasMore
                   ? ` — من أصل ${ledgerResult.total} (الأحدث أولاً؛ لقائمة الدفعات الكاملة استخدم أقساط الطلاب).`
                   : null}
-              </>
+              </p>
             ) : null}
-          </p>
+          </div>
+          <AddRevenueDialog createRevenueAction={createRevenueAction} defaultRevenueDate={defaultRevenueDate} />
         </div>
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead className="bg-muted/50 text-right">
-              <tr>
-                <th className="px-4 py-2 font-medium">التاريخ</th>
-                <th className="px-4 py-2 font-medium">النوع / العنوان</th>
-                <th className="px-4 py-2 font-medium">المبلغ</th>
-                <th className="px-4 py-2 font-medium w-[1%] whitespace-nowrap">إجراءات</th>
-              </tr>
-            </thead>
-            <tbody>
-              {ledgerItems.length === 0 ? (
+        {!ledgerResult.success ? null : ledgerItems.length === 0 ? (
+          <div className="rounded-xl border border-dashed border-muted-foreground/30 bg-background/40 p-8 text-center text-sm text-muted-foreground">
+            لا توجد حركات في السجل (لا دفعات قسط ولا إيرادات يدوية).
+          </div>
+        ) : (
+          <div className="overflow-x-auto rounded-lg border border-border/60 bg-background/60">
+            <table className="w-full min-w-[640px] border-collapse text-sm">
+              <thead className="bg-muted/50 text-right">
                 <tr>
-                  <td colSpan={4} className="px-4 py-8 text-center text-muted-foreground">
-                    لا توجد حركات في السجل (لا دفعات قسط ولا إيرادات يدوية).
-                  </td>
+                  <th className="px-4 py-3 font-medium text-foreground">التاريخ</th>
+                  <th className="px-4 py-3 font-medium text-foreground">النوع / العنوان</th>
+                  <th className="px-4 py-3 font-medium text-foreground">المبلغ</th>
+                  <th className="px-4 py-3 font-medium w-[1%] whitespace-nowrap text-foreground">إجراءات</th>
                 </tr>
-              ) : (
-                ledgerItems.map((row) => (
-                  <tr key={row.ledgerKey} className="border-t">
-                    <td className="px-4 py-2 whitespace-nowrap">{row.revenueDate}</td>
-                    <td className="px-4 py-2">
+              </thead>
+              <tbody>
+                {ledgerItems.map((row) => (
+                  <tr key={row.ledgerKey} className="border-t border-border/60">
+                    <td className="px-4 py-3 whitespace-nowrap">{row.revenueDate}</td>
+                    <td className="px-4 py-3">
                       <div className="flex flex-wrap items-center gap-2">
                         {row.source === "tuition_payment" ? (
-                          <span className="rounded-md bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">
+                          <span className="rounded-lg bg-sky px-2 py-0.5 text-xs font-medium text-foreground">
                             دفعة قسط
                           </span>
                         ) : (
-                          <span className="rounded-md bg-muted px-2 py-0.5 text-xs font-medium">يدوي</span>
+                          <span className="rounded-lg bg-Yellow/80 px-2 py-0.5 text-xs font-medium text-foreground">
+                            يدوي
+                          </span>
                         )}
                         <span>{row.title}</span>
                       </div>
                     </td>
-                    <td className="px-4 py-2 tabular-nums">{row.amount.toLocaleString("en-US")}</td>
-                    <td className="px-4 py-2">
+                    <td className="px-4 py-3 tabular-nums font-medium">{row.amount.toLocaleString("en-US")}</td>
+                    <td className="px-4 py-3">
                       {row.canEdit ? (
                         <div className="flex flex-wrap gap-2 justify-end">
-                          <Link
-                            href={`/staff/revenues?edit=${row.id}`}
-                            className="rounded-md border px-2 py-1 text-xs hover:bg-muted"
-                          >
-                            تعديل
-                          </Link>
-                          <form action={deleteRevenueAction}>
+                          <Button variant="outline" size="sm" asChild className="h-8 rounded-lg text-xs">
+                            <Link href={`/staff/revenues?edit=${row.id}`}>تعديل</Link>
+                          </Button>
+                          <form action={deleteRevenueAction} className="inline">
                             <input type="hidden" name="id" value={row.id} />
-                            <button
+                            <Button
                               type="submit"
-                              className="rounded-md border border-red-500/40 px-2 py-1 text-xs text-red-700 hover:bg-red-500/10"
+                              variant="outline"
+                              size="sm"
+                              className="h-8 rounded-lg border-red-500/40 text-xs text-red-800 hover:bg-red-500/10"
                             >
                               حذف
-                            </button>
+                            </Button>
                           </form>
                         </div>
                       ) : (
                         <div className="flex flex-wrap justify-end gap-2">
-                          <Link
-                            href="/staff/student-installments"
-                            className="rounded-md border px-2 py-1 text-xs hover:bg-muted"
-                          >
-                            أقساط الطلاب
-                          </Link>
+                          <Button variant="outline" size="sm" asChild className="h-8 rounded-lg text-xs">
+                            <Link href="/staff/student-installments">أقساط الطلاب</Link>
+                          </Button>
                         </div>
                       )}
                     </td>
                   </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </section>
     </div>
   );
