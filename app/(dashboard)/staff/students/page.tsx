@@ -1,6 +1,10 @@
 import { createStudent } from "@/actions/students";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { resolveSchoolId } from "@/lib/auth/resolve-school-id";
 import { createClient } from "@/lib/supabase/server";
+import { cn } from "@/lib/utils";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 
@@ -28,6 +32,11 @@ function asNullableNumber(value: FormDataEntryValue | null): number | undefined 
   return number;
 }
 
+const selectClassName = cn(
+  "flex h-10 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm shadow-sm transition-colors",
+  "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
+);
+
 export default async function StaffStudentsPage({ searchParams }: StudentsPageProps) {
   const params = (await searchParams) ?? {};
   const pageStatus = params.status;
@@ -44,8 +53,10 @@ export default async function StaffStudentsPage({ searchParams }: StudentsPagePr
 
   if (!schoolId) {
     return (
-      <div className="w-full max-w-5xl rounded-lg border border-red-500/30 bg-red-500/10 p-5 text-sm text-red-700">
-        لم يتم العثور على مدرسة مرتبطة بحسابك.
+      <div className="p-6 flex flex-col gap-6" dir="rtl">
+        <div className="rounded-2xl border border-amber-400/40 bg-amber-100/40 p-6 text-amber-900 text-center">
+          ⚠️ لم يتم العثور على مدرسة مرتبطة بحسابك
+        </div>
       </div>
     );
   }
@@ -81,135 +92,136 @@ export default async function StaffStudentsPage({ searchParams }: StudentsPagePr
   }
 
   return (
-    <div className="w-full max-w-6xl space-y-6" dir="rtl">
-      <div className="space-y-2">
-        <h1 className="text-2xl font-bold">إضافة طالب</h1>
-        <p className="text-sm text-muted-foreground">تسجيل طالب جديد في مدرستك.</p>
-        <p className="text-xs text-muted-foreground">
-          متابعة الأقساط والدفعات:{" "}
-          <Link href="/staff/student-installments" className="underline hover:text-foreground">
-            أقساط ودفعات
-          </Link>
-        </p>
-      </div>
+    <div className="p-6 max-w-5xl mx-auto flex flex-col gap-6" dir="rtl">
 
-      {pageMessage ? (
+
+
+      {/* رسالة */}
+      {pageMessage && (
         <div
-          className={`rounded-md border px-4 py-3 text-sm ${
+          className={`rounded-xl px-4 py-3 text-sm shadow-sm ${
             pageStatus === "success"
-              ? "border-green-500/40 bg-green-500/10 text-green-700"
-              : "border-red-500/40 bg-red-500/10 text-red-700"
+              ? "bg-green-100 text-green-800 border border-green-300"
+              : "bg-red-100 text-red-800 border border-red-300"
           }`}
         >
           {pageMessage}
         </div>
-      ) : null}
+      )}
 
-      <form action={createStudentAction} className="space-y-4 rounded-lg border p-5">
-        <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-          <div className="space-y-2">
-            <label htmlFor="fullName" className="text-sm font-medium">
-              الاسم الكامل
-            </label>
-            <input
-              id="fullName"
-              name="fullName"
-              required
-              className="w-full rounded-md border bg-background px-3 py-2 text-sm outline-none focus:border-primary"
-              placeholder="اسم الطالب"
-            />
+      {/* 🧾 Form Card */}
+      <section className="bg-white rounded-3xl shadow-lg border p-6 space-y-6">
+
+        <h2 className="text-lg font-semibold text-gray-800 border-b pb-2">
+          بيانات الطالب
+        </h2>
+
+        <form action={createStudentAction} className="space-y-5">
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+
+            {/* الاسم */}
+            <div className="space-y-2">
+              <Label htmlFor="fullName">الاسم الكامل</Label>
+              <Input
+                id="fullName"
+                name="fullName"
+                required
+                placeholder="مثال: أحمد محمد"
+                className="rounded-xl focus:ring-2 focus:ring-yellow-400"
+              />
+            </div>
+
+            {/* الصف */}
+            <div className="space-y-2">
+              <Label htmlFor="classId">الصف</Label>
+              <select
+                id="classId"
+                name="classId"
+                className="w-full h-10 rounded-xl border px-3 focus:ring-2 focus:ring-yellow-400"
+              >
+                <option value="">بدون صف</option>
+                {(classes ?? []).map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* النوع */}
+            <div className="space-y-2">
+              <Label htmlFor="gender">النوع</Label>
+              <select
+                id="gender"
+                name="gender"
+                defaultValue="male"
+                className="w-full h-10 rounded-xl border px-3 focus:ring-2 focus:ring-yellow-400"
+              >
+                <option value="male">ذكر</option>
+                <option value="female">أنثى</option>
+              </select>
+            </div>
+
+            {/* القسط */}
+            <div className="space-y-2">
+              <Label htmlFor="baseTuition">القسط الأساسي</Label>
+              <Input
+                id="baseTuition"
+                name="baseTuition"
+                type="number"
+                defaultValue="0"
+                className="rounded-xl focus:ring-2 focus:ring-yellow-400"
+              />
+            </div>
+
+            {/* التاريخ */}
+            <div className="space-y-2 md:col-span-2">
+              <Label htmlFor="installmentDueDate">تاريخ استحقاق القسط</Label>
+              <Input
+                id="installmentDueDate"
+                name="installmentDueDate"
+                type="date"
+                defaultValue={new Date().toISOString().slice(0, 10)}
+                className="rounded-xl focus:ring-2 focus:ring-yellow-400"
+              />
+            </div>
+
+            {/* الهاتف */}
+            <div className="space-y-2">
+              <Label htmlFor="guardianPhone">هاتف ولي الأمر</Label>
+              <Input
+                id="guardianPhone"
+                name="guardianPhone"
+                className="rounded-xl focus:ring-2 focus:ring-yellow-400"
+              />
+            </div>
+
+            {/* العنوان */}
+            <div className="space-y-2">
+              <Label htmlFor="address">العنوان</Label>
+              <Input
+                id="address"
+                name="address"
+                className="rounded-xl focus:ring-2 focus:ring-yellow-400"
+              />
+            </div>
+
           </div>
-          <div className="space-y-2">
-            <label htmlFor="classId" className="text-sm font-medium">
-              الصف
-            </label>
-            <select
-              id="classId"
-              name="classId"
-              className="w-full rounded-md border bg-background px-3 py-2 text-sm outline-none focus:border-primary"
+
+          {/* زر */}
+          <div className="pt-4">
+            <Button
+              type="submit"
+              size="default"
+              className="rounded-md bg-Yellow px-4 text-foreground shadow-sm hover:bg-Yellow/90 hover:scale-[1.02] transition-transform"
             >
-              <option value="">بدون صف</option>
-              {(classes ?? []).map((classItem) => (
-                <option key={classItem.id} value={classItem.id}>
-                  {classItem.name}
-                </option>
-              ))}
-            </select>
+              إضافة الطالب
+            </Button>
           </div>
-          <div className="space-y-2">
-            <label htmlFor="gender" className="text-sm font-medium">
-              النوع
-            </label>
-            <select
-              id="gender"
-              name="gender"
-              defaultValue="male"
-              className="w-full rounded-md border bg-background px-3 py-2 text-sm outline-none focus:border-primary"
-            >
-              <option value="male">ذكر</option>
-              <option value="female">أنثى</option>
-            </select>
-          </div>
-          <div className="space-y-2">
-            <label htmlFor="baseTuition" className="text-sm font-medium">
-              القسط الأساسي
-            </label>
-            <input
-              id="baseTuition"
-              name="baseTuition"
-              type="number"
-              min="0"
-              step="0.01"
-              defaultValue="0"
-              className="w-full rounded-md border bg-background px-3 py-2 text-sm outline-none focus:border-primary"
-            />
-            <p className="text-xs text-muted-foreground leading-relaxed">
-              إذا كان أكبر من صفر، يُنشأ تلقائياً قسط في النظام بنفس المبلغ؛ يجب تعبئة تاريخ الاستحقاق أدناه.
-            </p>
-          </div>
-          <div className="space-y-2 md:col-span-2">
-            <label htmlFor="installmentDueDate" className="text-sm font-medium">
-              تاريخ استحقاق القسط الأول
-            </label>
-            <input
-              id="installmentDueDate"
-              name="installmentDueDate"
-              type="date"
-              defaultValue={new Date().toISOString().slice(0, 10)}
-              className="w-full rounded-md border bg-background px-3 py-2 text-sm outline-none focus:border-primary"
-            />
-            <p className="text-xs text-muted-foreground">
-              يُستخدم فقط عندما يكون القسط الأساسي أكبر من صفر. تظهر حالة السداد في «أقساط ودفعات».
-            </p>
-          </div>
-          <div className="space-y-2">
-            <label htmlFor="guardianPhone" className="text-sm font-medium">
-              هاتف ولي الأمر
-            </label>
-            <input
-              id="guardianPhone"
-              name="guardianPhone"
-              className="w-full rounded-md border bg-background px-3 py-2 text-sm outline-none focus:border-primary"
-            />
-          </div>
-          <div className="space-y-2">
-            <label htmlFor="address" className="text-sm font-medium">
-              العنوان
-            </label>
-            <input
-              id="address"
-              name="address"
-              className="w-full rounded-md border bg-background px-3 py-2 text-sm outline-none focus:border-primary"
-            />
-          </div>
-        </div>
-        <button
-          type="submit"
-          className="inline-flex items-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:opacity-90"
-        >
-          إضافة الطالب
-        </button>
-      </form>
+
+        </form>
+      </section>
     </div>
   );
 }
