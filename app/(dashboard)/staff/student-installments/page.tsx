@@ -6,7 +6,11 @@ import {
   updateStudentInstallment,
   type InstallmentPaymentStatus,
 } from "@/actions/student-installments";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { resolveSchoolId } from "@/lib/auth/resolve-school-id";
+import { cn } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/server";
 import Link from "next/link";
 import { redirect } from "next/navigation";
@@ -51,6 +55,11 @@ function buildFlashUrl(type: "success" | "error", message: string, preserve: { s
   return `/staff/student-installments?${q.toString()}`;
 }
 
+const selectClassName = cn(
+  "flex h-10 min-w-[180px] rounded-lg border border-input bg-background px-3 py-2 text-sm shadow-sm transition-colors",
+  "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
+);
+
 function asPositiveNumber(value: FormDataEntryValue | null): number | undefined {
   const text = String(value ?? "").trim();
   if (!text) return undefined;
@@ -76,8 +85,10 @@ export default async function StudentInstallmentsPage({ searchParams }: { search
   const schoolId = await resolveSchoolId(supabase, user.id, user.email);
   if (!schoolId) {
     return (
-      <div className="w-full max-w-5xl rounded-lg border border-red-500/30 bg-red-500/10 p-5 text-sm text-red-700">
-        لم يتم العثور على مدرسة مرتبطة بحسابك.
+      <div className="p-4 flex flex-col gap-8" dir="rtl">
+        <div className="rounded-xl border border-amber-500/40 bg-amber-500/10 p-5 text-center text-sm text-amber-900">
+          لم يتم العثور على مدرسة مرتبطة بحسابك.
+        </div>
       </div>
     );
   }
@@ -175,30 +186,34 @@ export default async function StudentInstallmentsPage({ searchParams }: { search
   }
 
   return (
-    <div className="w-full max-w-6xl space-y-6" dir="rtl">
-      <div className="space-y-2">
-        <h1 className="text-2xl font-bold">أقساط الطلاب والدفعات</h1>
-        <p className="text-sm text-muted-foreground leading-relaxed">
-          يُعرّف القسط الأول غالباً من «إضافة طالب»؛ يمكنك من الجدول إضافة أقساط أخرى لنفس الطالب، أو تعديل القسط، أو
-          حذفه إن لم تُسجَّل دفعات عليه. تسجيل الدفعات من عمود «دفعة».
-        </p>
-        <p className="text-xs text-muted-foreground">
-          <Link href="/staff/studentlist" className="underline hover:text-foreground">
-            قائمة الطلاب
-          </Link>
-          {" · "}
-          <Link href="/staff/students" className="underline hover:text-foreground">
-            إضافة طالب
-          </Link>
-        </p>
+    <div className="p-4 flex flex-col gap-8 min-w-0" dir="rtl">
+      <div className="rounded-2xl bg-sky p-5 shadow-sm transition-shadow hover:shadow-md sm:p-6">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+          <div className="min-w-0 space-y-2">
+            <h1 className="text-2xl font-semibold tracking-tight text-foreground">أقساط الطلاب والدفعات</h1>
+            <p className="text-sm text-gray-600 leading-relaxed">
+              يُعرّف القسط الأول غالباً من «إضافة طالب»؛ من الجدول يمكنك إضافة أقساط أخرى، أو تعديل القسط، أو حذفه إن لم
+              تُسجَّل دفعات. تسجيل الدفعات من عمود «دفعة».
+            </p>
+            <p className="text-xs text-gray-600">
+              <Link href="/staff/studentlist" className="font-medium text-foreground underline-offset-4 hover:underline">
+                قائمة الطلاب
+              </Link>
+              <span className="mx-1.5 text-muted-foreground">·</span>
+              <Link href="/staff/students" className="font-medium text-foreground underline-offset-4 hover:underline">
+                إضافة طالب
+              </Link>
+            </p>
+          </div>
+        </div>
       </div>
 
       {flash && flashType ? (
         <div
-          className={`rounded-md border px-4 py-3 text-sm ${
+          className={`rounded-xl border px-4 py-3 text-sm ${
             flashType === "success"
-              ? "border-green-500/40 bg-green-500/10 text-green-700"
-              : "border-red-500/40 bg-red-500/10 text-red-700"
+              ? "border-green-500/40 bg-green-500/10 text-green-800"
+              : "border-red-500/40 bg-red-500/10 text-red-800"
           }`}
         >
           {flash}
@@ -206,24 +221,19 @@ export default async function StudentInstallmentsPage({ searchParams }: { search
       ) : null}
 
       {!listResult.success ? (
-        <div className="rounded-md border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-900">
+        <div className="rounded-xl border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-900">
           {listResult.message}
         </div>
       ) : null}
 
-      <section className="rounded-lg border p-5 space-y-4">
-        <h2 className="text-lg font-semibold">تصفية العرض</h2>
-        <form action={applyFiltersAction} className="flex flex-wrap items-end gap-3">
-          <div className="space-y-1">
-            <label htmlFor="filterStatus" className="text-xs font-medium text-muted-foreground">
+      <section className="rounded-xl border border-muted-foreground/20 bg-muted/20 p-4 sm:p-5">
+        <h2 className="mb-4 text-lg font-semibold text-foreground">تصفية العرض</h2>
+        <form action={applyFiltersAction} className="flex flex-wrap items-end gap-4">
+          <div className="space-y-2">
+            <Label htmlFor="filterStatus" className="text-muted-foreground">
               حالة القسط
-            </label>
-            <select
-              id="filterStatus"
-              name="status"
-              defaultValue={statusFilter}
-              className="rounded-md border bg-background px-3 py-2 text-sm min-w-[180px]"
-            >
+            </Label>
+            <select id="filterStatus" name="status" defaultValue={statusFilter} className={selectClassName}>
               {STATUS_OPTIONS.map((o) => (
                 <option key={o.value} value={o.value}>
                   {o.label}
@@ -231,16 +241,11 @@ export default async function StudentInstallmentsPage({ searchParams }: { search
               ))}
             </select>
           </div>
-          <div className="space-y-1">
-            <label htmlFor="filterClass" className="text-xs font-medium text-muted-foreground">
+          <div className="space-y-2">
+            <Label htmlFor="filterClass" className="text-muted-foreground">
               الصف
-            </label>
-            <select
-              id="filterClass"
-              name="classId"
-              defaultValue={classFilter}
-              className="rounded-md border bg-background px-3 py-2 text-sm min-w-[180px]"
-            >
+            </Label>
+            <select id="filterClass" name="classId" defaultValue={classFilter} className={selectClassName}>
               <option value="">كل الصفوف</option>
               {classes.map((c) => (
                 <option key={c.id} value={c.id}>
@@ -249,83 +254,83 @@ export default async function StudentInstallmentsPage({ searchParams }: { search
               ))}
             </select>
           </div>
-          <button
+          <Button
             type="submit"
-            className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:opacity-90"
+            className="rounded-xl bg-Yellow px-4 text-foreground shadow-sm hover:bg-Yellow/90 hover:scale-[1.02] transition-transform"
           >
             تطبيق
-          </button>
+          </Button>
         </form>
       </section>
 
-      <section className="rounded-lg border overflow-hidden">
-        <div className="border-b px-5 py-3">
-          <h2 className="text-lg font-semibold">الأقساط</h2>
-          <p className="text-xs text-muted-foreground mt-1">
-            {listResult.success ? `عدد السجلات: ${lines.length}` : null}
-          </p>
+      <section className="rounded-xl border border-muted-foreground/20 bg-muted/20 p-4 sm:p-5">
+        <div className="mb-4 flex flex-col gap-1 sm:flex-row sm:items-baseline sm:justify-between">
+          <h2 className="text-lg font-semibold text-foreground">الأقساط</h2>
+          {listResult.success ? (
+            <p className="text-xs text-muted-foreground">عدد السجلات: {lines.length}</p>
+          ) : null}
         </div>
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead className="bg-muted/50 text-right">
-              <tr>
-                <th className="px-3 py-2 font-medium">اسم الطالب</th>
-                <th className="px-3 py-2 font-medium">الصف</th>
-                <th className="px-3 py-2 font-medium">تاريخ الاستحقاق</th>
-                <th className="px-3 py-2 font-medium">المبلغ</th>
-                <th className="px-3 py-2 font-medium">المدفوع</th>
-                <th className="px-3 py-2 font-medium">المتبقي</th>
-                <th className="px-3 py-2 font-medium w-[1%] whitespace-nowrap">دفعة</th>
-                <th className="px-3 py-2 font-medium w-[1%] whitespace-nowrap">إجراءات</th>
-              </tr>
-            </thead>
-            <tbody>
-              {lines.length === 0 ? (
-                <tr>
-                  <td colSpan={8} className="px-4 py-8 text-center text-muted-foreground">
-                    لا توجد أقساط مطابقة للتصفية. عرّف الطالب من «إضافة طالب» بقسط أساسي أكبر من صفر وتاريخ استحقاق ليظهر
-                    القسط هنا.
-                  </td>
+        {lines.length === 0 ? (
+          <div className="rounded-xl border border-dashed border-muted-foreground/30 bg-background/40 p-8 text-center text-sm text-muted-foreground">
+            لا توجد أقساط مطابقة للتصفية. عرّف الطالب من «إضافة طالب» بقسط أساسي أكبر من صفر وتاريخ استحقاق ليظهر القسط
+            هنا.
+          </div>
+        ) : (
+          <div className="overflow-x-auto rounded-lg border border-border/60 bg-background/60">
+            <table className="w-full min-w-[880px] border-collapse text-sm">
+              <thead>
+                <tr className="border-b border-border bg-muted/40 text-right">
+                  <th className="px-4 py-3 font-medium">اسم الطالب</th>
+                  <th className="px-4 py-3 font-medium">الصف</th>
+                  <th className="px-4 py-3 font-medium">تاريخ الاستحقاق</th>
+                  <th className="px-4 py-3 font-medium">المبلغ</th>
+                  <th className="px-4 py-3 font-medium">المدفوع</th>
+                  <th className="px-4 py-3 font-medium">المتبقي</th>
+                  <th className="px-4 py-3 font-medium whitespace-nowrap w-[1%]">دفعة</th>
+                  <th className="px-4 py-3 font-medium whitespace-nowrap w-[1%] text-right">إجراءات</th>
                 </tr>
-              ) : (
-                lines.map((line) => {
+              </thead>
+              <tbody>
+                {lines.map((line, index) => {
                   const canPay = line.paymentStatus !== "paid_full";
                   return (
-                    <tr key={line.installmentId} className="border-t align-top">
-                      <td className="px-3 py-2">{line.studentName}</td>
-                      <td className="px-3 py-2 text-muted-foreground">{line.className ?? "—"}</td>
-                      <td className="px-3 py-2 whitespace-nowrap">{line.dueDate}</td>
-                      <td className="px-3 py-2 tabular-nums">{line.totalAmount.toLocaleString("en-US")}</td>
-                      <td className="px-3 py-2 tabular-nums">{line.totalPaid.toLocaleString("en-US")}</td>
-                      <td className="px-3 py-2 tabular-nums">{line.remaining.toLocaleString("en-US")}</td>
-                      <td className="px-3 py-2">
+                    <tr
+                      key={line.installmentId}
+                      className={`border-b border-border/80 align-top last:border-0 ${
+                        index % 2 === 0 ? "bg-background/40" : "bg-muted/10"
+                      }`}
+                    >
+                      <td className="px-4 py-3 font-medium">{line.studentName}</td>
+                      <td className="px-4 py-3 text-muted-foreground">{line.className ?? "—"}</td>
+                      <td className="px-4 py-3 whitespace-nowrap tabular-nums">{line.dueDate}</td>
+                      <td className="px-4 py-3 tabular-nums">{line.totalAmount.toLocaleString("en-US")}</td>
+                      <td className="px-4 py-3 tabular-nums">{line.totalPaid.toLocaleString("en-US")}</td>
+                      <td className="px-4 py-3 tabular-nums">{line.remaining.toLocaleString("en-US")}</td>
+                      <td className="px-4 py-3">
                         {canPay ? (
-                          <form action={recordPaymentAction} className="flex flex-wrap items-center gap-1 justify-end">
+                          <form action={recordPaymentAction} className="flex flex-wrap items-center justify-end gap-1.5">
                             <input type="hidden" name="studentId" value={line.studentId} />
                             <input type="hidden" name="installmentId" value={line.installmentId} />
                             <input type="hidden" name="preserveStatus" value={statusFilter} />
                             <input type="hidden" name="preserveClassId" value={classFilter} />
-                            <input
+                            <Input
                               name="amount"
                               type="number"
                               min="0.01"
                               step="0.01"
                               placeholder="المبلغ"
                               required
-                              className="w-24 rounded border bg-background px-2 py-1 text-xs"
+                              className="h-8 w-[6.5rem] rounded-lg text-xs"
                             />
-                            <button
-                              type="submit"
-                              className="rounded-md border bg-background px-2 py-1 text-xs hover:bg-muted"
-                            >
+                            <Button type="submit" variant="outline" size="sm" className="h-8 shrink-0 text-xs">
                               تسجيل
-                            </button>
+                            </Button>
                           </form>
                         ) : (
                           <span className="text-xs text-muted-foreground">—</span>
                         )}
                       </td>
-                      <td className="px-3 py-2">
+                      <td className="px-4 py-3 text-right">
                         <InstallmentRowActions
                           installmentId={line.installmentId}
                           studentId={line.studentId}
@@ -341,11 +346,11 @@ export default async function StudentInstallmentsPage({ searchParams }: { search
                       </td>
                     </tr>
                   );
-                })
-              )}
-            </tbody>
-          </table>
-        </div>
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
       </section>
     </div>
   );

@@ -1,4 +1,7 @@
 import { createTeacher } from "@/actions/teachers";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { resolveSchoolId } from "@/lib/auth/resolve-school-id";
 import { createClient } from "@/lib/supabase/server";
 import Link from "next/link";
@@ -44,8 +47,10 @@ export default async function StaffAddTeachersPage({ searchParams }: AddTeachers
 
   if (!schoolId) {
     return (
-      <div className="w-full max-w-5xl rounded-lg border border-red-500/30 bg-red-500/10 p-5 text-sm text-red-700">
-        لم يتم العثور على مدرسة مرتبطة بحسابك.
+      <div className="p-6 flex flex-col gap-6" dir="rtl">
+        <div className="rounded-2xl border border-amber-400/40 bg-amber-100/40 p-6 text-amber-900 text-center">
+          ⚠️ لم يتم العثور على مدرسة مرتبطة بحسابك
+        </div>
       </div>
     );
   }
@@ -70,105 +75,87 @@ export default async function StaffAddTeachersPage({ searchParams }: AddTeachers
   }
 
   return (
-    <div className="w-full max-w-6xl space-y-6" dir="rtl">
-      <div className="space-y-2">
-        <h1 className="text-2xl font-bold">إضافة معلم</h1>
-        <p className="text-sm text-muted-foreground">
-          تسجيل معلم جديد في مدرستك (الحقول وفق جدول المعلمين في قاعدة البيانات).
-        </p>
-        <p className="text-xs text-muted-foreground">
-          <Link href="/staff/teacher-installments" className="underline hover:text-foreground">
-            رواتب وأقساط المعلمين
-          </Link>
-        </p>
-      </div>
-
+    <div className="p-6 max-w-5xl mx-auto flex flex-col gap-6" dir="rtl">
       {pageMessage ? (
         <div
-          className={`rounded-md border px-4 py-3 text-sm ${
+          className={`rounded-xl px-4 py-3 text-sm shadow-sm ${
             pageStatus === "success"
-              ? "border-green-500/40 bg-green-500/10 text-green-700"
-              : "border-red-500/40 bg-red-500/10 text-red-700"
+              ? "bg-green-100 text-green-800 border border-green-300"
+              : "bg-red-100 text-red-800 border border-red-300"
           }`}
         >
           {pageMessage}
         </div>
       ) : null}
 
-      <form action={createTeacherAction} className="space-y-4 rounded-lg border p-5">
-        <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-          <div className="space-y-2 md:col-span-2">
-            <label htmlFor="fullName" className="text-sm font-medium">
-              الاسم الكامل
-            </label>
-            <input
-              id="fullName"
-              name="fullName"
-              required
-              className="w-full rounded-md border bg-background px-3 py-2 text-sm outline-none focus:border-primary"
-              placeholder="اسم المعلم"
-            />
+      <section className="bg-white rounded-3xl shadow-lg border p-6 space-y-6">
+
+
+        <form action={createTeacherAction} className="space-y-5">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+            <div className="space-y-2 md:col-span-2">
+              <Label htmlFor="fullName">الاسم الكامل</Label>
+              <Input
+                id="fullName"
+                name="fullName"
+                required
+                placeholder="اسم المعلم"
+                className="rounded-xl focus:ring-2 focus:ring-yellow-400"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="phone">الهاتف</Label>
+              <Input id="phone" name="phone" className="rounded-xl focus:ring-2 focus:ring-yellow-400" />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="salary">الراتب (أساس قسط الراتب)</Label>
+              <Input
+                id="salary"
+                name="salary"
+                type="number"
+                min="0"
+                step="0.01"
+                defaultValue="0"
+                className="rounded-xl focus:ring-2 focus:ring-yellow-400"
+              />
+
+            </div>
+
+            <div className="space-y-2 md:col-span-2">
+              <Label htmlFor="salaryInstallmentDueDate">تاريخ استحقاق قسط الراتب الأول</Label>
+              <Input
+                id="salaryInstallmentDueDate"
+                name="salaryInstallmentDueDate"
+                type="date"
+                className="rounded-xl focus:ring-2 focus:ring-yellow-400"
+              />
+
+            </div>
+
+            <div className="space-y-2 md:col-span-2">
+              <Label htmlFor="subject">المادة / التخصص</Label>
+              <Input
+                id="subject"
+                name="subject"
+                placeholder="مثال: رياضيات، لغة عربية…"
+                className="rounded-xl focus:ring-2 focus:ring-yellow-400"
+              />
+            </div>
           </div>
-          <div className="space-y-2">
-            <label htmlFor="phone" className="text-sm font-medium">
-              الهاتف
-            </label>
-            <input
-              id="phone"
-              name="phone"
-              className="w-full rounded-md border bg-background px-3 py-2 text-sm outline-none focus:border-primary"
-            />
+
+          <div className="pt-4">
+            <Button
+              type="submit"
+              size="default"
+              className="rounded-md bg-Yellow px-4 text-foreground shadow-sm hover:bg-Yellow/90 hover:scale-[1.02] transition-transform"
+            >
+              إضافة المعلم
+            </Button>
           </div>
-          <div className="space-y-2">
-            <label htmlFor="salary" className="text-sm font-medium">
-              الراتب (أساس قسط الراتب)
-            </label>
-            <input
-              id="salary"
-              name="salary"
-              type="number"
-              min="0"
-              step="0.01"
-              defaultValue="0"
-              className="w-full rounded-md border bg-background px-3 py-2 text-sm outline-none focus:border-primary"
-            />
-            <p className="text-xs text-muted-foreground">
-              إذا كان أكبر من صفر، يُنشأ تلقائياً قسط راتب بنفس المبلغ؛ يجب تعبئة تاريخ الاستحقاق أدناه.
-            </p>
-          </div>
-          <div className="space-y-2">
-            <label htmlFor="salaryInstallmentDueDate" className="text-sm font-medium">
-              تاريخ استحقاق قسط الراتب الأول
-            </label>
-            <input
-              id="salaryInstallmentDueDate"
-              name="salaryInstallmentDueDate"
-              type="date"
-              className="w-full rounded-md border bg-background px-3 py-2 text-sm outline-none focus:border-primary"
-            />
-            <p className="text-xs text-muted-foreground">
-              يُستخدم فقط عندما يكون الراتب أكبر من صفر. حالة الصرف تظهر في «رواتب وأقساط المعلمين».
-            </p>
-          </div>
-          <div className="space-y-2 md:col-span-2">
-            <label htmlFor="subject" className="text-sm font-medium">
-              المادة / التخصص
-            </label>
-            <input
-              id="subject"
-              name="subject"
-              className="w-full rounded-md border bg-background px-3 py-2 text-sm outline-none focus:border-primary"
-              placeholder="مثال: رياضيات، لغة عربية…"
-            />
-          </div>
-        </div>
-        <button
-          type="submit"
-          className="inline-flex items-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:opacity-90"
-        >
-          إضافة المعلم
-        </button>
-      </form>
+        </form>
+      </section>
     </div>
   );
 }
