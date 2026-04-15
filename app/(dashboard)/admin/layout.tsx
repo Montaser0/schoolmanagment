@@ -25,7 +25,7 @@ export default async function ProtectedLayout({
   const role = await resolveAppRole(supabase, user.id, user.email);
 
   if (role !== "owner") {
-    redirect("/staff/class");
+    redirect("/staff");
   }
 
   return (

@@ -9,6 +9,7 @@ import CountCharts from "@/components/component/CountCharts";
 import FinanceChart from "@/components/component/FinanceChart";
 import UserCard from "@/components/component/UserCard";
 import EventCalender from "@/components/component/EventCalender";
+import { Suspense } from "react";
 function formatShortDate(iso: string): string {
   const d = iso.slice(0, 10);
   if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) return iso;
@@ -24,7 +25,17 @@ function formatShortDate(iso: string): string {
   }
 }
 
-export default async function StaffPage() {
+function StaffPageFallback() {
+  return (
+    <div className="p-4" dir="rtl">
+      <div className="rounded-lg border border-muted-foreground/20 bg-muted/20 p-4 text-sm text-muted-foreground">
+        جاري تحميل بيانات لوحة الموظف...
+      </div>
+    </div>
+  );
+}
+
+async function StaffPageContent() {
   const dash = await getStaffDashboardStats();
   if (!dash.success) {
     return (
@@ -95,5 +106,13 @@ export default async function StaffPage() {
         />
       </div>
     </div>
+  );
+}
+
+export default function StaffPage() {
+  return (
+    <Suspense fallback={<StaffPageFallback />}>
+      <StaffPageContent />
+    </Suspense>
   );
 }

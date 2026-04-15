@@ -12,7 +12,8 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import Link from "next/link";
+import logo from "@/app/images/logo.png";
+import Image from "next/image";
 import { useState } from "react";
 import { resolveAppRole } from "@/lib/auth/resolve-app-role";
 
@@ -37,7 +38,7 @@ export function LoginForm({
       });
       if (error) throw error;
       if (!data.session) {
-        throw new Error("Login succeeded but no active session was returned.");
+        throw new Error("تم تسجيل الدخول لكن لم تُفعَّل جلسة. حاول مرة أخرى.");
       }
 
       const role = await resolveAppRole(supabase, data.user.id, data.user.email);
@@ -48,12 +49,10 @@ export function LoginForm({
         );
       }
 
-      const redirectPath = role === "owner" ? "/admin" : "/staff/class";
-      // تجنّب خطأ Next.js "Router action dispatched before initialization" بعد تسجيل الدخول،
-      // وضمان تحميل الجلسة والكوكيز في الطلب التالي.
+      const redirectPath = role === "owner" ? "/admin" : "/staff";
       window.location.assign(redirectPath);
     } catch (error: unknown) {
-      setError(error instanceof Error ? error.message : "An error occurred");
+      setError(error instanceof Error ? error.message : "حدث خطأ غير متوقع.");
     } finally {
       setIsLoading(false);
     }
@@ -61,58 +60,71 @@ export function LoginForm({
 
   return (
     <div className={cn("flex flex-col gap-6", className)} {...props}>
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-2xl">Login</CardTitle>
-          <CardDescription>
-            Enter your email below to login to your account
+      <Card className="overflow-hidden rounded-2xl border-border shadow-lg">
+        <div className="h-1.5 bg-sky" aria-hidden />
+        <CardHeader className="space-y-3 bg-muted/20 pb-4 pt-6">
+          <div className="flex justify-center">
+            <Image
+              src={logo}
+              alt="شعار نظام إدارة المدرسة"
+              width={96}
+              height={96}
+              priority
+              className="h-24 w-24 object-contain"
+            />
+          </div>
+          <CardTitle className="text-center text-2xl font-semibold tracking-tight text-foreground">تسجيل الدخول</CardTitle>
+          <CardDescription className="text-center text-sm leading-relaxed text-gray-600">
+            أدخل البريد الإلكتروني وكلمة المرور للوصول إلى لوحة المدرسة.
           </CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className="px-6 pb-6 pt-0">
           <form onSubmit={handleLogin}>
-            <div className="flex flex-col gap-6">
+            <div className="flex flex-col gap-5">
               <div className="grid gap-2">
-                <Label htmlFor="email">Email</Label>
+                <Label htmlFor="email" className="text-base text-muted-foreground">
+                  البريد الإلكتروني
+                </Label>
                 <Input
                   id="email"
                   type="email"
-                  placeholder="m@example.com"
+                  placeholder="example@school.com"
                   required
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
+                  className="h-12 rounded-lg px-4 py-3 text-base md:text-base"
+                  autoComplete="email"
                 />
               </div>
               <div className="grid gap-2">
-                <div className="flex items-center">
-                  <Label htmlFor="password">Password</Label>
-                  <Link
-                    href="/auth/forgot-password"
-                    className="ml-auto inline-block text-sm underline-offset-4 hover:underline"
-                  >
-                    Forgot your password?
-                  </Link>
-                </div>
+                <Label htmlFor="password" className="text-base text-muted-foreground">
+                  كلمة المرور
+                </Label>
                 <Input
                   id="password"
                   type="password"
                   required
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
+                  className="h-12 rounded-lg px-4 py-3 text-base md:text-base"
+                  autoComplete="current-password"
                 />
               </div>
-              {error && <p className="text-sm text-red-500">{error}</p>}
-              <Button type="submit" className="w-full" disabled={isLoading}>
-                {isLoading ? "Logging in..." : "Login"}
-              </Button>
-            </div>
-            <div className="mt-4 text-center text-sm">
-              Don&apos;t have an account?{" "}
-              <Link
-                href="/auth/sign-up"
-                className="underline underline-offset-4"
+              {error ? (
+                <div
+                  role="alert"
+                  className="rounded-xl border border-red-500/40 bg-red-500/10 px-3 py-2.5 text-sm text-red-800"
+                >
+                  {error}
+                </div>
+              ) : null}
+              <Button
+                type="submit"
+                disabled={isLoading}
+                className="h-12 w-full rounded-xl bg-Yellow text-base text-foreground shadow-sm transition-transform hover:bg-Yellow/90 hover:scale-[1.01] disabled:hover:scale-100"
               >
-                Sign up
-              </Link>
+                {isLoading ? "جاري تسجيل الدخول…" : "دخول"}
+              </Button>
             </div>
           </form>
         </CardContent>

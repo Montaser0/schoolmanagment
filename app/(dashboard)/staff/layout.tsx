@@ -6,12 +6,26 @@ import logoImg from "@/app/images/logo.png";
 import Image from "next/image";
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { Suspense } from "react";
 
 type StaffLayoutProps = {
   children: React.ReactNode;
 };
 
-export default async function StaffLayout({ children }: StaffLayoutProps) {
+function StaffLayoutFallback() {
+  return (
+    <div className="h-screen flex bg-gray-50">
+      <div className="flex-1 mr-20 lg:mr-64 bg-gray-50 min-w-0">
+        <div className="pt-16 lg:pt-20 min-h-full flex items-center justify-center" dir="rtl">
+          <p className="text-sm text-muted-foreground">جاري التحميل...</p>
+        </div>
+      </div>
+      <div className="w-20 lg:w-64 bg-white border-l border-gray-200 shadow-lg flex-shrink-0 fixed right-0 top-0 h-full z-50" />
+    </div>
+  );
+}
+
+async function StaffLayoutContent({ children }: StaffLayoutProps) {
   const supabase = await createClient();
   const {
     data: { user },
@@ -69,5 +83,13 @@ export default async function StaffLayout({ children }: StaffLayoutProps) {
         <StaffMenu roleLabel={roleLabel} />
       </div>
     </div>
+  );
+}
+
+export default function StaffLayout({ children }: StaffLayoutProps) {
+  return (
+    <Suspense fallback={<StaffLayoutFallback />}>
+      <StaffLayoutContent>{children}</StaffLayoutContent>
+    </Suspense>
   );
 }

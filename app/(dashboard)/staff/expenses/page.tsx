@@ -2,14 +2,18 @@ import {
   createExpense,
   deleteExpense,
   getFinancialSummary,
-  getTotalExpensesAmount,
   listExpenseLedger,
   updateExpense,
 } from "@/actions/expenses";
+import UserCard from "@/components/component/UserCard";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { resolveSchoolId } from "@/lib/auth/resolve-school-id";
 import { createClient } from "@/lib/supabase/server";
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { AddExpenseDialog } from "./add-expense-dialog";
 
 type ExpensesPageProps = {
   searchParams?: Promise<{
@@ -53,6 +57,16 @@ function formDataConfirmPersonalFunds(formData: FormData): boolean {
   return v === "on" || v === "true" || v === "1";
 }
 
+function sumExpenseAmountRows(rows: { amount?: string | number | null }[] | null): number {
+  let sum = 0;
+  for (const row of rows ?? []) {
+    const raw = row?.amount;
+    const n = typeof raw === "number" ? raw : Number.parseFloat(String(raw ?? ""));
+    if (Number.isFinite(n)) sum += n;
+  }
+  return Number(sum.toFixed(2));
+}
+
 type ExpenseEditRow = {
   id: string;
   title: string;
@@ -77,19 +91,24 @@ export default async function StaffExpensesPage({ searchParams }: ExpensesPagePr
 
   if (!schoolId) {
     return (
-      <div className="w-full max-w-5xl rounded-lg border border-red-500/30 bg-red-500/10 p-5 text-sm text-red-700">
-        لم يتم العثور على مدرسة مرتبطة بحسابك.
+      <div className="p-4 flex flex-col gap-8" dir="rtl">
+        <div className="rounded-xl border border-amber-500/40 bg-amber-500/10 p-5 text-center text-sm text-amber-900">
+          لم يتم العثور على مدرسة مرتبطة بحسابك.
+        </div>
       </div>
     );
   }
 
-  const [ledgerResult, totalResult, summaryResult] = await Promise.all([
+  const [ledgerResult, summaryResult, expSumRes] = await Promise.all([
     listExpenseLedger(),
-    getTotalExpensesAmount(),
     getFinancialSummary(),
+    supabase.from("expenses").select("amount").eq("school_id", schoolId),
   ]);
 
   const ledgerItems = ledgerResult.success ? ledgerResult.items : [];
+
+  const expensesTableSumOk = !expSumRes.error;
+  const expensesTableTotal = expensesTableSumOk ? sumExpenseAmountRows(expSumRes.data as { amount?: string | number | null }[]) : 0;
 
   let editing: ExpenseEditRow | undefined;
   if (editId) {
@@ -174,26 +193,42 @@ export default async function StaffExpensesPage({ searchParams }: ExpensesPagePr
     redirect(buildRedirectUrl(result.success ? "success" : "error", result.message));
   }
 
-  const totalDisplay = totalResult.success
-    ? totalResult.total.toLocaleString("en-US")
-    : null;
+  const defaultExpenseDate = new Date().toISOString().slice(0, 10);
 
   return (
-    <div className="w-full max-w-6xl space-y-6" dir="rtl">
-      <div className="space-y-2">
-        <h1 className="text-2xl font-bold">المصاريف</h1>
-        <p className="text-sm text-muted-foreground">
-          سجل المصاريف أدناه يجمع تلقائياً دفعات رواتب المعلمين (عند الصرف من صفحة أقساط الرواتب) مع المصروفات
-          اليدوية المسجّلة في النموذج. إجمالي المصروفات في البطاقة يطابق الملخص المالي دون تكرار في قاعدة البيانات.
-        </p>
+    <div className="p-4 flex flex-col gap-8 min-w-0" dir="rtl">
+      <div className="rounded-2xl bg-sky p-5 shadow-sm transition-shadow hover:shadow-md sm:p-6">
+        <div className="space-y-2">
+          <h1 className="text-2xl font-semibold tracking-tight text-foreground">المصاريف</h1>
+          <p className="text-sm text-gray-600 leading-relaxed">
+            سجل المصاريف أدناه يجمع تلقائياً دفعات رواتب المعلمين (عند الصرف من صفحة أقساط الرواتب) مع المصروفات اليدوية
+            المسجّلة في النموذج. إجمالي المصروفات في البطاقات يطابق الملخص المالي دون تكرار في قاعدة البيانات.
+          </p>
+          <p className="text-xs text-gray-600">
+            <Link
+              href="/staff/teacher-installments"
+              className="font-medium text-foreground underline-offset-4 hover:underline"
+            >
+              أقساط المعلمين
+            </Link>
+            <span className="mx-1.5 text-muted-foreground">·</span>
+            <Link href="/staff/revenues" className="font-medium text-foreground underline-offset-4 hover:underline">
+              الإيرادات
+            </Link>
+            <span className="mx-1.5 text-muted-foreground">·</span>
+            <Link href="/staff" className="font-medium text-foreground underline-offset-4 hover:underline">
+              لوحة التحكم
+            </Link>
+          </p>
+        </div>
       </div>
 
       {pageMessage ? (
         <div
-          className={`rounded-md border px-4 py-3 text-sm ${
+          className={`rounded-xl border px-4 py-3 text-sm ${
             pageStatus === "success"
-              ? "border-green-500/40 bg-green-500/10 text-green-700"
-              : "border-red-500/40 bg-red-500/10 text-red-700"
+              ? "border-green-500/40 bg-green-500/10 text-green-800"
+              : "border-red-500/40 bg-red-500/10 text-red-800"
           }`}
         >
           {pageMessage}
@@ -201,47 +236,44 @@ export default async function StaffExpensesPage({ searchParams }: ExpensesPagePr
       ) : null}
 
       {!ledgerResult.success ? (
-        <div className="rounded-md border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-900">
+        <div className="rounded-xl border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-900">
           {ledgerResult.message}
         </div>
       ) : null}
 
-      <div className="grid gap-4 sm:grid-cols-2">
-        <div className="rounded-lg border bg-card p-5 shadow-sm">
-          <p className="text-sm font-medium text-muted-foreground">إجمالي المصروفات</p>
-          {totalResult.success ? (
-            <p className="mt-2 text-3xl font-bold tabular-nums">{totalDisplay}</p>
-          ) : (
-            <p className="mt-2 text-sm text-destructive">{totalResult.message}</p>
-          )}
+      {!summaryResult.success ? (
+        <div className="rounded-xl border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+          {summaryResult.message}
         </div>
-        <div className="rounded-lg border bg-card p-5 shadow-sm">
-          <p className="text-sm font-medium text-muted-foreground">الرصيد المتاح (بعد المصروفات)</p>
-          {summaryResult.success ? (
-            <p
-              className={`mt-2 text-3xl font-bold tabular-nums ${
-                summaryResult.netProfit < 0 ? "text-destructive" : ""
-              }`}
-            >
-              {summaryResult.netProfit.toLocaleString("en-US")}
+      ) : (
+        <div className="flex flex-col gap-3">
+          <div className="flex gap-4 justify-between flex-wrap">
+            <UserCard type="إجمالي مصروفات المدرسة" count={summaryResult.totalExpenses} badgeLabel="ملخص مالي" />
+            <UserCard type="الرصيد المتاح (بعد المصروفات)" count={summaryResult.netProfit} badgeLabel="صافٍ" />
+            <UserCard
+              type="منها: مسجّل في جدول expenses"
+              count={expensesTableSumOk ? expensesTableTotal : 0}
+              badgeLabel={expensesTableSumOk ? "جدول expenses" : "تعذر الجلب"}
+            />
+          </div>
+          {!expensesTableSumOk ? (
+            <p className="text-sm text-destructive">
+              {expSumRes.error?.message ?? "تعذر جمع مبالغ جدول المصروفات اليدوية."}
             </p>
           ) : (
-            <p className="mt-2 text-sm text-destructive">{summaryResult.message}</p>
-          )}
-          {summaryResult.success ? (
-            <p className="mt-2 text-xs text-muted-foreground leading-relaxed">
+            <p className="text-xs text-muted-foreground leading-relaxed">
               الإيرادات تشمل دفعات الطلاب والإيرادات المسجّلة؛ المصروفات تشمل المصروفات اليدوية ودفعات رواتب المعلمين.
               الرصيد = الإيرادات ناقص المصروفات. لا يُسمح بتسجيل مصروف يتجاوز الرصيد إلا بعد تأكيد أنه من مال شخصي.
             </p>
-          ) : null}
+          )}
         </div>
-      </div>
+      )}
 
       {editing ? (
-        <section className="rounded-lg border border-primary/30 p-5 space-y-4">
+        <section className="rounded-xl border border-primary/35 bg-sky/40 p-4 shadow-sm sm:p-5 space-y-4">
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <h2 className="text-lg font-semibold">تعديل مصروف</h2>
-            <Link href="/staff/expenses" className="text-sm text-muted-foreground hover:text-foreground">
+            <h2 className="text-lg font-semibold text-foreground">تعديل مصروف</h2>
+            <Link href="/staff/expenses" className="text-sm font-medium text-foreground underline-offset-4 hover:underline">
               إلغاء التعديل
             </Link>
           </div>
@@ -249,23 +281,22 @@ export default async function StaffExpensesPage({ searchParams }: ExpensesPagePr
             <input type="hidden" name="id" value={editing.id} />
             <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
               <div className="space-y-2 md:col-span-2">
-                <label htmlFor="editTitle" className="text-sm font-medium">
+                <Label htmlFor="editTitle" className="text-muted-foreground">
                   العنوان / الوصف
-                </label>
-                <input
+                </Label>
+                <Input
                   id="editTitle"
                   name="title"
                   required
                   defaultValue={editing.title}
-                  className="w-full rounded-md border bg-background px-3 py-2 text-sm outline-none focus:border-primary"
                   placeholder="مثال: راتب شهر مارس، شراء مستلزمات…"
                 />
               </div>
               <div className="space-y-2">
-                <label htmlFor="editAmount" className="text-sm font-medium">
+                <Label htmlFor="editAmount" className="text-muted-foreground">
                   المبلغ
-                </label>
-                <input
+                </Label>
+                <Input
                   id="editAmount"
                   name="amount"
                   type="number"
@@ -273,20 +304,18 @@ export default async function StaffExpensesPage({ searchParams }: ExpensesPagePr
                   step="0.01"
                   required
                   defaultValue={editing.amount}
-                  className="w-full rounded-md border bg-background px-3 py-2 text-sm outline-none focus:border-primary"
                 />
               </div>
               <div className="space-y-2 md:col-span-2">
-                <label htmlFor="editExpenseDate" className="text-sm font-medium">
+                <Label htmlFor="editExpenseDate" className="text-muted-foreground">
                   تاريخ المصروف
-                </label>
-                <input
+                </Label>
+                <Input
                   id="editExpenseDate"
                   name="expenseDate"
                   type="date"
                   required
                   defaultValue={editing.expense_date.slice(0, 10)}
-                  className="w-full rounded-md border bg-background px-3 py-2 text-sm outline-none focus:border-primary"
                 />
               </div>
               <div className="flex items-start gap-2 md:col-span-2">
@@ -295,175 +324,104 @@ export default async function StaffExpensesPage({ searchParams }: ExpensesPagePr
                   name="confirmPersonalFunds"
                   type="checkbox"
                   value="1"
-                  className="mt-1 h-4 w-4 rounded border"
+                  className="mt-1 h-4 w-4 shrink-0 rounded border border-input"
                 />
-                <label htmlFor="editConfirmPersonalFunds" className="text-sm leading-relaxed text-muted-foreground">
+                <Label htmlFor="editConfirmPersonalFunds" className="text-sm font-normal leading-relaxed text-muted-foreground">
                   أؤكد أن هذا المصروف من مال شخصي للمدير أو خارج صندوق المدرسة عند تجاوز الرصيد المتاح.
-                </label>
+                </Label>
               </div>
             </div>
-            <button
+            <Button
               type="submit"
-              className="inline-flex items-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:opacity-90"
+              className="rounded-xl bg-Yellow px-4 text-foreground shadow-sm hover:bg-Yellow/90 hover:scale-[1.02] transition-transform"
             >
               حفظ التعديلات
-            </button>
+            </Button>
           </form>
         </section>
       ) : null}
 
-      <section className="rounded-lg border p-5 space-y-4">
-        <h2 className="text-lg font-semibold">إضافة مصروف</h2>
-        <form action={createExpenseAction} className="space-y-4">
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-            <div className="space-y-2 md:col-span-2">
-              <label htmlFor="title" className="text-sm font-medium">
-                العنوان / الوصف
-              </label>
-              <input
-                id="title"
-                name="title"
-                required
-                className="w-full rounded-md border bg-background px-3 py-2 text-sm outline-none focus:border-primary"
-                placeholder="مثال: راتب معلم، فاتورة كهرباء، صيانة…"
-              />
-            </div>
-            <div className="space-y-2">
-              <label htmlFor="amount" className="text-sm font-medium">
-                المبلغ
-              </label>
-              <input
-                id="amount"
-                name="amount"
-                type="number"
-                min="0.01"
-                step="0.01"
-                required
-                className="w-full rounded-md border bg-background px-3 py-2 text-sm outline-none focus:border-primary"
-              />
-            </div>
-            <div className="space-y-2 md:col-span-2">
-              <label htmlFor="expenseDate" className="text-sm font-medium">
-                تاريخ المصروف
-              </label>
-              <input
-                id="expenseDate"
-                name="expenseDate"
-                type="date"
-                defaultValue={new Date().toISOString().slice(0, 10)}
-                className="w-full rounded-md border bg-background px-3 py-2 text-sm outline-none focus:border-primary"
-              />
-            </div>
-            <div className="flex items-start gap-2 md:col-span-2">
-              <input
-                id="confirmPersonalFunds"
-                name="confirmPersonalFunds"
-                type="checkbox"
-                value="1"
-                className="mt-1 h-4 w-4 rounded border"
-              />
-              <label htmlFor="confirmPersonalFunds" className="text-sm leading-relaxed text-muted-foreground">
-                أؤكد أن هذا المصروف من مال شخصي للمدير أو خارج صندوق المدرسة عند تجاوز الرصيد المتاح.
-              </label>
-            </div>
-          </div>
-          <button
-            type="submit"
-            className="inline-flex items-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:opacity-90"
-          >
-            تسجيل المصروف
-          </button>
-        </form>
-      </section>
-
-      <section className="rounded-lg border overflow-hidden">
-        <div className="border-b px-5 py-3">
-          <h2 className="text-lg font-semibold">سجل المصاريف</h2>
-          <p className="text-xs text-muted-foreground mt-1">
+      <section className="rounded-xl border border-muted-foreground/20 bg-muted/20 p-4 sm:p-5">
+        <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="min-w-0 space-y-1">
+            <h2 className="text-lg font-semibold text-foreground">سجل المصاريف</h2>
             {ledgerResult.success ? (
-              <>
+              <p className="text-xs text-muted-foreground">
                 المعروض: {ledgerItems.length}
                 {ledgerResult.hasMore
                   ? ` — من أصل ${ledgerResult.total} (الأحدث أولاً؛ لقائمة دفعات الرواتب الكاملة استخدم أقساط المعلمين).`
                   : null}
-              </>
+              </p>
             ) : null}
-          </p>
+          </div>
+          <AddExpenseDialog createExpenseAction={createExpenseAction} defaultExpenseDate={defaultExpenseDate} />
         </div>
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead className="bg-muted/50 text-right">
-              <tr>
-                <th className="px-4 py-2 font-medium">التاريخ</th>
-                <th className="px-4 py-2 font-medium">النوع / العنوان</th>
-                <th className="px-4 py-2 font-medium">المبلغ</th>
-                <th className="px-4 py-2 font-medium w-[1%] whitespace-nowrap">إجراءات</th>
-              </tr>
-            </thead>
-            <tbody>
-              {ledgerItems.length === 0 ? (
+        {!ledgerResult.success ? null : ledgerItems.length === 0 ? (
+          <div className="rounded-xl border border-dashed border-muted-foreground/30 bg-background/40 p-8 text-center text-sm text-muted-foreground">
+            لا توجد حركات في السجل (لا دفعات رواتب ولا مصروفات يدوية).
+          </div>
+        ) : (
+          <div className="overflow-x-auto rounded-lg border border-border/60 bg-background/60">
+            <table className="w-full min-w-[640px] border-collapse text-sm">
+              <thead className="bg-muted/50 text-right">
                 <tr>
-                  <td colSpan={4} className="px-4 py-8 text-center text-muted-foreground">
-                    لا توجد حركات في السجل (لا دفعات رواتب ولا مصروفات يدوية).
-                  </td>
+                  <th className="px-4 py-3 font-medium text-foreground">التاريخ</th>
+                  <th className="px-4 py-3 font-medium text-foreground">النوع / العنوان</th>
+                  <th className="px-4 py-3 font-medium text-foreground">المبلغ</th>
+                  <th className="px-4 py-3 font-medium w-[1%] whitespace-nowrap text-foreground">إجراءات</th>
                 </tr>
-              ) : (
-                ledgerItems.map((row) => (
-                  <tr key={row.ledgerKey} className="border-t">
-                    <td className="px-4 py-2 whitespace-nowrap">{row.expenseDate}</td>
-                    <td className="px-4 py-2">
+              </thead>
+              <tbody>
+                {ledgerItems.map((row) => (
+                  <tr key={row.ledgerKey} className="border-t border-border/60">
+                    <td className="px-4 py-3 whitespace-nowrap">{row.expenseDate}</td>
+                    <td className="px-4 py-3">
                       <div className="flex flex-wrap items-center gap-2">
                         {row.source === "teacher_salary_payment" ? (
-                          <span className="rounded-md bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">
+                          <span className="rounded-lg bg-sky px-2 py-0.5 text-xs font-medium text-foreground">
                             دفعة راتب
                           </span>
                         ) : row.type === "salary" ? (
-                          <span className="rounded-md bg-amber-500/15 px-2 py-0.5 text-xs font-medium text-amber-900">
-                            راتب
-                          </span>
+                          <span className="rounded-lg bg-Yellow/80 px-2 py-0.5 text-xs font-medium text-foreground">راتب</span>
                         ) : (
-                          <span className="rounded-md bg-muted px-2 py-0.5 text-xs font-medium">عام</span>
+                          <span className="rounded-lg bg-muted px-2 py-0.5 text-xs font-medium text-foreground">عام</span>
                         )}
                         <span>{row.title}</span>
                       </div>
                     </td>
-                    <td className="px-4 py-2 tabular-nums">{row.amount.toLocaleString("en-US")}</td>
-                    <td className="px-4 py-2">
+                    <td className="px-4 py-3 tabular-nums font-medium">{row.amount.toLocaleString("en-US")}</td>
+                    <td className="px-4 py-3">
                       {row.canEdit ? (
                         <div className="flex flex-wrap gap-2 justify-end">
-                          <Link
-                            href={`/staff/expenses?edit=${row.id}`}
-                            className="rounded-md border px-2 py-1 text-xs hover:bg-muted"
-                          >
-                            تعديل
-                          </Link>
-                          <form action={deleteExpenseAction}>
+                          <Button variant="outline" size="sm" asChild className="h-8 rounded-lg text-xs">
+                            <Link href={`/staff/expenses?edit=${row.id}`}>تعديل</Link>
+                          </Button>
+                          <form action={deleteExpenseAction} className="inline">
                             <input type="hidden" name="id" value={row.id} />
-                            <button
+                            <Button
                               type="submit"
-                              className="rounded-md border border-red-500/40 px-2 py-1 text-xs text-red-700 hover:bg-red-500/10"
+                              variant="outline"
+                              size="sm"
+                              className="h-8 rounded-lg border-red-500/40 text-xs text-red-800 hover:bg-red-500/10"
                             >
                               حذف
-                            </button>
+                            </Button>
                           </form>
                         </div>
                       ) : (
                         <div className="flex flex-wrap justify-end gap-2">
-                          <Link
-                            href="/staff/teacher-installments"
-                            className="rounded-md border px-2 py-1 text-xs hover:bg-muted"
-                          >
-                            أقساط المعلمين
-                          </Link>
+                          <Button variant="outline" size="sm" asChild className="h-8 rounded-lg text-xs">
+                            <Link href="/staff/teacher-installments">أقساط المعلمين</Link>
+                          </Button>
                         </div>
                       )}
                     </td>
                   </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </section>
     </div>
   );
