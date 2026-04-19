@@ -7,19 +7,17 @@ import {
 } from "@/actions/expenses";
 import UserCard from "@/components/component/UserCard";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { resolveSchoolId } from "@/lib/auth/resolve-school-id";
 import { createClient } from "@/lib/supabase/server";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { AddExpenseDialog } from "./add-expense-dialog";
+import { ExpenseRowActions } from "./expense-row-actions";
 
 type ExpensesPageProps = {
   searchParams?: Promise<{
     status?: string;
     message?: string;
-    edit?: string;
   }>;
 };
 
@@ -67,18 +65,10 @@ function sumExpenseAmountRows(rows: { amount?: string | number | null }[] | null
   return Number(sum.toFixed(2));
 }
 
-type ExpenseEditRow = {
-  id: string;
-  title: string;
-  amount: number;
-  expense_date: string;
-};
-
 export default async function StaffExpensesPage({ searchParams }: ExpensesPageProps) {
   const params = (await searchParams) ?? {};
   const pageStatus = params.status;
   const pageMessage = params.message;
-  const editId = params.edit?.trim() || undefined;
 
   const supabase = await createClient();
   const {
@@ -109,26 +99,6 @@ export default async function StaffExpensesPage({ searchParams }: ExpensesPagePr
 
   const expensesTableSumOk = !expSumRes.error;
   const expensesTableTotal = expensesTableSumOk ? sumExpenseAmountRows(expSumRes.data as { amount?: string | number | null }[]) : 0;
-
-  let editing: ExpenseEditRow | undefined;
-  if (editId) {
-    const { data: row } = await supabase
-      .from("expenses")
-      .select("id,title,amount,expense_date")
-      .eq("id", editId)
-      .eq("school_id", schoolId)
-      .maybeSingle();
-    if (row) {
-      const amount =
-        typeof row.amount === "number" ? row.amount : Number.parseFloat(String(row.amount));
-      editing = {
-        id: row.id,
-        title: row.title,
-        amount: Number.isFinite(amount) ? amount : 0,
-        expense_date: row.expense_date,
-      };
-    }
-  }
 
   async function createExpenseAction(formData: FormData) {
     "use server";
@@ -163,11 +133,7 @@ export default async function StaffExpensesPage({ searchParams }: ExpensesPagePr
       return;
     }
     if (amount === undefined) {
-      redirect(
-        buildRedirectUrl("error", "أدخل مبلغًا صالحًا.", {
-          edit: id,
-        }),
-      );
+      redirect(buildRedirectUrl("error", "أدخل مبلغًا صالحًا."));
       return;
     }
 
@@ -179,11 +145,7 @@ export default async function StaffExpensesPage({ searchParams }: ExpensesPagePr
       confirmPersonalFunds: formDataConfirmPersonalFunds(formData),
     });
 
-    redirect(
-      buildRedirectUrl(result.success ? "success" : "error", result.message, {
-        ...(result.success ? {} : { edit: id }),
-      }),
-    );
+    redirect(buildRedirectUrl(result.success ? "success" : "error", result.message));
   }
 
   async function deleteExpenseAction(formData: FormData) {
@@ -236,78 +198,6 @@ export default async function StaffExpensesPage({ searchParams }: ExpensesPagePr
         </div>
       )}
 
-      {editing ? (
-        <section className="rounded-xl border border-primary/35 bg-sky/40 p-4 shadow-sm sm:p-5 space-y-4">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <h2 className="text-lg font-semibold text-foreground">تعديل مصروف</h2>
-            <Link href="/staff/expenses" className="text-sm font-medium text-foreground underline-offset-4 hover:underline">
-              إلغاء التعديل
-            </Link>
-          </div>
-          <form action={updateExpenseAction} className="space-y-4">
-            <input type="hidden" name="id" value={editing.id} />
-            <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-              <div className="space-y-2 md:col-span-2">
-                <Label htmlFor="editTitle" className="text-muted-foreground">
-                  العنوان / الوصف
-                </Label>
-                <Input
-                  id="editTitle"
-                  name="title"
-                  required
-                  defaultValue={editing.title}
-                  placeholder="مثال: راتب شهر مارس، شراء مستلزمات…"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="editAmount" className="text-muted-foreground">
-                  المبلغ
-                </Label>
-                <Input
-                  id="editAmount"
-                  name="amount"
-                  type="number"
-                  min="0.01"
-                  step="0.01"
-                  required
-                  defaultValue={editing.amount}
-                />
-              </div>
-              <div className="space-y-2 md:col-span-2">
-                <Label htmlFor="editExpenseDate" className="text-muted-foreground">
-                  تاريخ المصروف
-                </Label>
-                <Input
-                  id="editExpenseDate"
-                  name="expenseDate"
-                  type="date"
-                  required
-                  defaultValue={editing.expense_date.slice(0, 10)}
-                />
-              </div>
-              <div className="flex items-start gap-2 md:col-span-2">
-                <input
-                  id="editConfirmPersonalFunds"
-                  name="confirmPersonalFunds"
-                  type="checkbox"
-                  value="1"
-                  className="mt-1 h-4 w-4 shrink-0 rounded border border-input"
-                />
-                <Label htmlFor="editConfirmPersonalFunds" className="text-sm font-normal leading-relaxed text-muted-foreground">
-                  أؤكد أن هذا المصروف من مال شخصي للمدير أو خارج صندوق المدرسة عند تجاوز الرصيد المتاح.
-                </Label>
-              </div>
-            </div>
-            <Button
-              type="submit"
-              className="rounded-xl bg-Yellow px-4 text-foreground shadow-sm hover:bg-Yellow/90 hover:scale-[1.02] transition-transform"
-            >
-              حفظ التعديلات
-            </Button>
-          </form>
-        </section>
-      ) : null}
-
       <section className="rounded-xl border border-muted-foreground/20 bg-muted/20 p-4 sm:p-5">
         <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="min-w-0 space-y-1">
@@ -359,24 +249,16 @@ export default async function StaffExpensesPage({ searchParams }: ExpensesPagePr
                     <td className="px-4 py-3 tabular-nums font-medium">${row.amount.toLocaleString("en-US")}</td>
                     <td className="px-4 py-3">
                       {row.canEdit ? (
-                        <div className="flex flex-wrap gap-2 justify-end">
-                          <Button variant="outline" size="sm" asChild className="h-8 rounded-lg text-xs">
-                            <Link href={`/staff/expenses?edit=${row.id}`}>تعديل</Link>
-                          </Button>
-                          <form action={deleteExpenseAction} className="inline">
-                            <input type="hidden" name="id" value={row.id} />
-                            <Button
-                              type="submit"
-                              variant="outline"
-                              size="sm"
-                              className="h-8 rounded-lg border-red-500/40 text-xs text-red-800 hover:bg-red-500/10"
-                            >
-                              حذف
-                            </Button>
-                          </form>
-                        </div>
+                        <ExpenseRowActions
+                          id={row.id}
+                          title={row.title}
+                          amount={row.amount}
+                          expenseDate={row.expenseDate}
+                          updateExpenseAction={updateExpenseAction}
+                          deleteExpenseAction={deleteExpenseAction}
+                        />
                       ) : (
-                        <div className="flex flex-wrap justify-end gap-2">
+                        <div className="flex items-center justify-end gap-2 whitespace-nowrap">
                           <Button variant="outline" size="sm" asChild className="h-8 rounded-lg text-xs">
                             <Link href="/staff/teacher-installments">أقساط المعلمين</Link>
                           </Button>

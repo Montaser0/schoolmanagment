@@ -1,26 +1,27 @@
 import { getFinancialSummary } from "@/actions/expenses";
 import {
   createRevenue,
+  deleteTuitionPayment,
   deleteRevenue,
   getTotalRevenuesAmount,
   listRevenueLedger,
+  updateTuitionPayment,
   updateRevenue,
 } from "@/actions/revenues";
 import UserCard from "@/components/component/UserCard";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { resolveSchoolId } from "@/lib/auth/resolve-school-id";
 import { createClient } from "@/lib/supabase/server";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { AddRevenueDialog } from "./add-revenue-dialog";
+import { RevenueRowActions } from "./revenue-row-actions";
+import { TuitionPaymentRowActions } from "./tuition-payment-row-actions";
 
 type RevenuesPageProps = {
   searchParams?: Promise<{
     status?: string;
     message?: string;
-    edit?: string;
   }>;
 };
 
@@ -53,18 +54,10 @@ function asPositiveNumber(value: FormDataEntryValue | null): number | undefined 
   return number;
 }
 
-type RevenueEditRow = {
-  id: string;
-  title: string;
-  amount: number;
-  revenue_date: string;
-};
-
 export default async function StaffRevenuesPage({ searchParams }: RevenuesPageProps) {
   const params = (await searchParams) ?? {};
   const pageStatus = params.status;
   const pageMessage = params.message;
-  const editId = params.edit?.trim() || undefined;
 
   const supabase = await createClient();
   const {
@@ -92,26 +85,6 @@ export default async function StaffRevenuesPage({ searchParams }: RevenuesPagePr
   ]);
 
   const ledgerItems = ledgerResult.success ? ledgerResult.items : [];
-
-  let editing: RevenueEditRow | undefined;
-  if (editId) {
-    const { data: row } = await supabase
-      .from("revenues")
-      .select("id,title,amount,revenue_date")
-      .eq("id", editId)
-      .eq("school_id", schoolId)
-      .maybeSingle();
-    if (row) {
-      const amount =
-        typeof row.amount === "number" ? row.amount : Number.parseFloat(String(row.amount));
-      editing = {
-        id: row.id,
-        title: row.title,
-        amount: Number.isFinite(amount) ? amount : 0,
-        revenue_date: row.revenue_date,
-      };
-    }
-  }
 
   async function createRevenueAction(formData: FormData) {
     "use server";
@@ -145,11 +118,7 @@ export default async function StaffRevenuesPage({ searchParams }: RevenuesPagePr
       return;
     }
     if (amount === undefined) {
-      redirect(
-        buildRedirectUrl("error", "أدخل مبلغًا صالحًا.", {
-          edit: id,
-        }),
-      );
+      redirect(buildRedirectUrl("error", "أدخل مبلغًا صالحًا."));
       return;
     }
 
@@ -160,17 +129,43 @@ export default async function StaffRevenuesPage({ searchParams }: RevenuesPagePr
       revenueDate: revenueDate ?? undefined,
     });
 
-    redirect(
-      buildRedirectUrl(result.success ? "success" : "error", result.message, {
-        ...(result.success ? {} : { edit: id }),
-      }),
-    );
+    redirect(buildRedirectUrl(result.success ? "success" : "error", result.message));
   }
 
   async function deleteRevenueAction(formData: FormData) {
     "use server";
     const id = String(formData.get("id") ?? "").trim();
     const result = await deleteRevenue({ id });
+    redirect(buildRedirectUrl(result.success ? "success" : "error", result.message));
+  }
+
+  async function updateTuitionPaymentAction(formData: FormData) {
+    "use server";
+    const paymentId = String(formData.get("paymentId") ?? "").trim();
+    const amount = asPositiveNumber(formData.get("amount"));
+    const paidAt = asNullableText(formData.get("paidAt"));
+
+    if (!paymentId) {
+      redirect(buildRedirectUrl("error", "معرّف الدفعة مفقود."));
+      return;
+    }
+    if (amount === undefined) {
+      redirect(buildRedirectUrl("error", "أدخل مبلغ دفعة صالحًا."));
+      return;
+    }
+
+    const result = await updateTuitionPayment({
+      paymentId,
+      amount,
+      paidAt: paidAt ?? undefined,
+    });
+    redirect(buildRedirectUrl(result.success ? "success" : "error", result.message));
+  }
+
+  async function deleteTuitionPaymentAction(formData: FormData) {
+    "use server";
+    const paymentId = String(formData.get("paymentId") ?? "").trim();
+    const result = await deleteTuitionPayment({ paymentId });
     redirect(buildRedirectUrl(result.success ? "success" : "error", result.message));
   }
 
@@ -219,69 +214,6 @@ export default async function StaffRevenuesPage({ searchParams }: RevenuesPagePr
           ) : null}
         </div>
       )}
-
-      {editing ? (
-        <section className="rounded-xl border border-primary/35 bg-sky/40 p-4 shadow-sm sm:p-5 space-y-4">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <h2 className="text-lg font-semibold text-foreground">تعديل إيراد</h2>
-            <Link
-              href="/staff/revenues"
-              className="text-sm font-medium text-foreground underline-offset-4 hover:underline"
-            >
-              إلغاء التعديل
-            </Link>
-          </div>
-          <form action={updateRevenueAction} className="space-y-4">
-            <input type="hidden" name="id" value={editing.id} />
-            <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-              <div className="space-y-2 md:col-span-2">
-                <Label htmlFor="editTitle" className="text-muted-foreground">
-                  العنوان / الوصف
-                </Label>
-                <Input
-                  id="editTitle"
-                  name="title"
-                  required
-                  defaultValue={editing.title}
-                  placeholder="مثال: تبرع جهة خيرية، إيجار قاعة…"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="editAmount" className="text-muted-foreground">
-                  المبلغ
-                </Label>
-                <Input
-                  id="editAmount"
-                  name="amount"
-                  type="number"
-                  min="0.01"
-                  step="0.01"
-                  required
-                  defaultValue={editing.amount}
-                />
-              </div>
-              <div className="space-y-2 md:col-span-2">
-                <Label htmlFor="editRevenueDate" className="text-muted-foreground">
-                  تاريخ الإيراد
-                </Label>
-                <Input
-                  id="editRevenueDate"
-                  name="revenueDate"
-                  type="date"
-                  required
-                  defaultValue={editing.revenue_date.slice(0, 10)}
-                />
-              </div>
-            </div>
-            <Button
-              type="submit"
-              className="rounded-xl bg-Yellow px-4 text-foreground shadow-sm hover:bg-Yellow/90 hover:scale-[1.02] transition-transform"
-            >
-              حفظ التعديلات
-            </Button>
-          </form>
-        </section>
-      ) : null}
 
       <section className="rounded-xl border border-muted-foreground/20 bg-muted/20 p-4 sm:p-5">
         <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -334,24 +266,26 @@ export default async function StaffRevenuesPage({ searchParams }: RevenuesPagePr
                     <td className="px-4 py-3 tabular-nums font-medium">${row.amount.toLocaleString("en-US")}</td>
                     <td className="px-4 py-3">
                       {row.canEdit ? (
-                        <div className="flex flex-wrap gap-2 justify-end">
-                          <Button variant="outline" size="sm" asChild className="h-8 rounded-lg text-xs">
-                            <Link href={`/staff/revenues?edit=${row.id}`}>تعديل</Link>
-                          </Button>
-                          <form action={deleteRevenueAction} className="inline">
-                            <input type="hidden" name="id" value={row.id} />
-                            <Button
-                              type="submit"
-                              variant="outline"
-                              size="sm"
-                              className="h-8 rounded-lg border-red-500/40 text-xs text-red-800 hover:bg-red-500/10"
-                            >
-                              حذف
-                            </Button>
-                          </form>
-                        </div>
+                        row.source === "manual" ? (
+                          <RevenueRowActions
+                            id={row.id}
+                            title={row.title}
+                            amount={row.amount}
+                            revenueDate={row.revenueDate}
+                            updateRevenueAction={updateRevenueAction}
+                            deleteRevenueAction={deleteRevenueAction}
+                          />
+                        ) : (
+                          <TuitionPaymentRowActions
+                            paymentId={row.id}
+                            amount={row.amount}
+                            revenueDate={row.revenueDate}
+                            updateTuitionPaymentAction={updateTuitionPaymentAction}
+                            deleteTuitionPaymentAction={deleteTuitionPaymentAction}
+                          />
+                        )
                       ) : (
-                        <div className="flex flex-wrap justify-end gap-2">
+                        <div className="flex items-center justify-end gap-2 whitespace-nowrap">
                           <Button variant="outline" size="sm" asChild className="h-8 rounded-lg text-xs">
                             <Link href="/staff/student-installments">أقساط الطلاب</Link>
                           </Button>
