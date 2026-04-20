@@ -1,18 +1,10 @@
 import { createSchoolWithOwner } from "@/actions/school";
 import InputField from "@/components/component/InputField";
 import { redirect } from "next/navigation";
+import { Suspense } from "react";
+import { SchoolsStatusAlert } from "./schools-status-alert";
 
-type SchoolsPageProps = {
-  searchParams?: Promise<{
-    status?: string;
-    message?: string;
-  }>;
-};
-
-export default async function SchoolsPage({ searchParams }: SchoolsPageProps) {
-  const params = (await searchParams) ?? {};
-  const status = params.status;
-  const message = params.message;
+export default async function SchoolsPage() {
 
   async function createSchoolAction(formData: FormData) {
     "use server";
@@ -54,17 +46,9 @@ export default async function SchoolsPage({ searchParams }: SchoolsPageProps) {
         </p>
       </div>
 
-      {message ? (
-        <div
-          className={`rounded-md border px-4 py-3 text-sm ${
-            status === "success"
-              ? "border-green-500/40 bg-green-500/10 text-green-700"
-              : "border-red-500/40 bg-red-500/10 text-red-700"
-          }`}
-        >
-          {message}
-        </div>
-      ) : null}
+      <Suspense fallback={null}>
+        <SchoolsStatusAlert />
+      </Suspense>
 
       <form action={createSchoolAction} className="space-y-4 rounded-lg border p-5">
         <InputField

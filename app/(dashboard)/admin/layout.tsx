@@ -13,6 +13,24 @@ export default async function ProtectedLayout({
 }: {
   children: React.ReactNode;
 }) {
+  return (
+    <Suspense
+      fallback={
+        <main className="min-h-screen flex items-center justify-center">
+          <p className="text-sm text-muted-foreground">Loading...</p>
+        </main>
+      }
+    >
+      <ProtectedLayoutContent>{children}</ProtectedLayoutContent>
+    </Suspense>
+  );
+}
+
+async function ProtectedLayoutContent({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
   const supabase = await createClient();
   const {
     data: { user },
