@@ -2,10 +2,10 @@ import { backfillAbsentForPastUnmarked, createStudent, deleteStudent, listStuden
 import { Button } from "@/components/ui/button";
 import { resolveSchoolId } from "@/lib/auth/resolve-school-id";
 import { createClient } from "@/lib/supabase/server";
-import { ArrowUpDown, Filter, Search } from "lucide-react";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { DailyAttendanceCheckbox } from "./daily-attendance-checkbox";
+import { InstantStudentFilters } from "./instant-student-filters";
 import { StudentCreateDialog, StudentRowActions } from "./student-crud-actions";
 
 const STUDENT_PAGE_SIZE = 10;
@@ -372,51 +372,21 @@ export default async function StaffStudentListPage({ searchParams }: StudentList
       <section className="bg-white rounded-md overflow-hidden">
         <div className="flex items-center justify-between">
           <h1 className="hidden md:block text-lg font-semibold mr-2">قائمة الطلاب</h1>
-          <form method="get" className="flex flex-col md:flex-row items-center gap-4 w-full md:w-auto">
-            <div className="relative w-full md:w-auto">
-              <Search className="pointer-events-none absolute right-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-              <input
-                name="q"
-                defaultValue={query ?? ""}
-                placeholder="ابحث باسم الطالب أو رقم ولي الأمر"
-                className="h-8 w-full md:w-64 rounded-md border border-input bg-background pr-9 pl-3 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-yellow-400"
-              />
-            </div>
-
-            <select
-              name="classId"
-              defaultValue={classId ?? ""}
-              className="h-8 rounded-md border border-input bg-background px-3 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-yellow-400"
-            >
-              <option value="">كل الصفوف</option>
-              {((classes ?? []) as { id: string; name: string }[]).map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name}
-                </option>
-              ))}
-            </select>
-
-            <input
-              type="date"
-              name="date"
-              defaultValue={attendanceDate}
-              className="h-8 rounded-md border border-input bg-background px-3 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-yellow-400"
+          <div className="flex flex-col md:flex-row items-center gap-4 w-full md:w-auto">
+            <InstantStudentFilters
+              classes={(classes ?? []) as { id: string; name: string }[]}
+              initialQuery={query ?? ""}
+              initialClassId={classId ?? ""}
+              initialDate={attendanceDate}
             />
-            <button type="submit" className="hidden" aria-hidden />
             <div className="flex items-center gap-4">
               <StudentCreateDialog
                 classes={(classes ?? []) as { id: string; name: string }[]}
                 preserve={preserveState}
                 createStudentAction={createStudentAction}
               />
-              <button type="button" className="w-8 h-8 flex items-center justify-center rounded-full bg-Yellow p-2">
-                <Filter className="size-4" />
-              </button>
-              <button type="button" className="w-8 h-8 flex items-center justify-center rounded-full bg-Yellow p-2">
-                <ArrowUpDown className="size-4" />
-              </button>
             </div>
-          </form>
+          </div>
         </div>
         {!studentsResult.success ? <span className="text-sm text-red-700">{studentsResult.message}</span> : null}
 
@@ -434,6 +404,7 @@ export default async function StaffStudentListPage({ searchParams }: StudentList
                   <th className="hidden lg:table-cell px-4 py-3 font-semibold text-center">هاتف ولي الأمر</th>
                   <th className="hidden xl:table-cell px-4 py-3 font-semibold text-center">العنوان</th>
                   <th className="hidden md:table-cell px-4 py-3 font-semibold text-center">نسبة الحضور</th>
+                  <th className="px-4 py-3 font-semibold text-center whitespace-nowrap">الحضور اليومي</th>
                   <th className="px-4 py-3 text-start font-semibold whitespace-nowrap">الاجراءات</th>
                 </tr>
               </thead>
@@ -461,7 +432,7 @@ export default async function StaffStudentListPage({ searchParams }: StudentList
                         {student.gender === "male" ? "ذكر" : "أنثى"}
                       </td>
                       <td className="hidden lg:table-cell px-4 py-3 text-center">
-                        {student.baseTuition.toLocaleString("en-US")}
+                        ${student.baseTuition.toLocaleString("en-US")}
                       </td>
                       <td className="hidden lg:table-cell px-4 py-3 text-center">{student.guardianPhone ?? "—"}</td>
                       <td className="hidden xl:table-cell px-4 py-3 text-center text-muted-foreground">
@@ -471,13 +442,17 @@ export default async function StaffStudentListPage({ searchParams }: StudentList
                         <div className="font-semibold tabular-nums text-foreground">{rate.toLocaleString("en-US")}%</div>
                         <div className="text-xs text-muted-foreground">{attendedDays.toLocaleString("en-US")} يوم من أصل 22</div>
                       </td>
-                      <td>
-                        <div className="flex items-center gap-2">
+                      <td className="px-4 py-3">
+                        <div className="flex items-center justify-center">
                           <DailyAttendanceCheckbox
                             studentId={student.id}
                             attendanceDate={attendanceDate}
                             initialPresent={isPresent}
                           />
+                        </div>
+                      </td>
+                      <td>
+                        <div className="flex items-center gap-2">
                           <StudentRowActions
                             student={{
                               id: student.id,
