@@ -1,4 +1,5 @@
 import { createSchoolWithOwner } from "@/actions/school";
+import InputField from "@/components/component/InputField";
 import { redirect } from "next/navigation";
 
 type SchoolsPageProps = {
@@ -66,49 +67,48 @@ export default async function SchoolsPage({ searchParams }: SchoolsPageProps) {
       ) : null}
 
       <form action={createSchoolAction} className="space-y-4 rounded-lg border p-5">
-        <div className="space-y-2">
-          <label htmlFor="schoolName" className="text-sm font-medium">
-            اسم المدرسة
-          </label>
-          <input
-            id="schoolName"
-            name="schoolName"
-            type="text"
-            required
-            minLength={2}
-            placeholder="مثال: مدرسة النخبة"
-            className="w-full rounded-md border bg-background px-3 py-2 text-sm outline-none ring-0 focus:border-primary"
-          />
-        </div>
+        <InputField
+          label="اسم المدرسة"
+          name="schoolName"
+          containerClassName="space-y-2"
+          width="full"
+          inputClassName="rounded-md border bg-background px-3 py-2 text-sm outline-none ring-0 focus:border-primary"
+          inputProps={{
+            id: "schoolName",
+            required: true,
+            minLength: 2,
+            placeholder: "مثال: مدرسة النخبة",
+          }}
+        />
 
-        <div className="space-y-2">
-          <label htmlFor="ownerEmail" className="text-sm font-medium">
-            بريد مالك المدرسة
-          </label>
-          <input
-            id="ownerEmail"
-            name="ownerEmail"
-            type="email"
-            required
-            placeholder="owner@school.com"
-            className="w-full rounded-md border bg-background px-3 py-2 text-sm outline-none ring-0 focus:border-primary"
-          />
-        </div>
+        <InputField
+          label="بريد مالك المدرسة"
+          name="ownerEmail"
+          type="email"
+          containerClassName="space-y-2"
+          width="full"
+          inputClassName="rounded-md border bg-background px-3 py-2 text-sm outline-none ring-0 focus:border-primary"
+          inputProps={{
+            id: "ownerEmail",
+            required: true,
+            placeholder: "owner@school.com",
+          }}
+        />
 
-        <div className="space-y-2">
-          <label htmlFor="ownerPassword" className="text-sm font-medium">
-            كلمة مرور المالك
-          </label>
-          <input
-            id="ownerPassword"
-            name="ownerPassword"
-            type="password"
-            required
-            minLength={6}
-            placeholder="6 أحرف على الأقل"
-            className="w-full rounded-md border bg-background px-3 py-2 text-sm outline-none ring-0 focus:border-primary"
-          />
-        </div>
+        <InputField
+          label="كلمة مرور المالك"
+          name="ownerPassword"
+          type="password"
+          containerClassName="space-y-2"
+          width="full"
+          inputClassName="rounded-md border bg-background px-3 py-2 text-sm outline-none ring-0 focus:border-primary"
+          inputProps={{
+            id: "ownerPassword",
+            required: true,
+            minLength: 6,
+            placeholder: "6 أحرف على الأقل",
+          }}
+        />
 
         <div className="space-y-2">
           <label htmlFor="subscriptionPlan" className="text-sm font-medium">

@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { Search } from "lucide-react";
+import InputField from "@/components/component/InputField";
 
 type ClassItem = {
   id: string;
@@ -48,12 +49,16 @@ export function InstantStudentFilters({
     <>
       <div className="relative w-full md:w-auto">
         <Search className="pointer-events-none absolute right-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-        <input
+        <InputField
           name="q"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder="ابحث باسم الطالب أو رقم ولي الأمر"
-          className="h-8 w-full md:w-64 rounded-md border border-input bg-background pr-9 pl-3 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-yellow-400"
+          width="full"
+          containerClassName="w-full md:w-64"
+          inputClassName="h-8 rounded-md border border-input bg-background pr-9 pl-3 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-yellow-400"
+          inputProps={{
+            value: query,
+            onChange: (e) => setQuery(e.target.value),
+            placeholder: "ابحث باسم الطالب أو رقم ولي الأمر",
+          }}
         />
       </div>
 
@@ -71,12 +76,16 @@ export function InstantStudentFilters({
         ))}
       </select>
 
-      <input
-        type="date"
+      <InputField
         name="date"
-        value={date}
-        onChange={(e) => setDate(e.target.value)}
-        className="h-8 rounded-md border border-input bg-background px-3 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-yellow-400"
+        type="date"
+        width="full"
+        containerClassName="w-full md:w-auto"
+        inputClassName="h-8 rounded-md border border-input bg-background px-3 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-yellow-400"
+        inputProps={{
+          value: date,
+          onChange: (e) => setDate(e.target.value),
+        }}
       />
     </>
   );
