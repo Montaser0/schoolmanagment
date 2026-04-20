@@ -15,9 +15,19 @@ type ClassItem = {
 
 type StudentItem = {
   id: string;
+  firstName: string;
+  lastName: string;
+  fatherName: string | null;
+  motherName: string | null;
   fullName: string;
   classId: string | null;
   gender: "male" | "female";
+  birthPlace: string | null;
+  birthDate: string | null;
+  registryPlace: string | null;
+  registryDate: string | null;
+  enrollmentDate: string | null;
+  previousSchool: string | null;
   baseTuition: number;
   guardianPhone: string | null;
   address: string | null;
@@ -79,8 +89,20 @@ export function StudentCreateDialog({ classes, preserve, createStudentAction }: 
           <h3 className="text-base font-semibold">إضافة طالب جديد</h3>
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             <div className="space-y-1">
-              <Label htmlFor="create-fullName">الاسم الكامل</Label>
-              <Input id="create-fullName" name="fullName" required placeholder="مثال: أحمد محمد" />
+              <Label htmlFor="create-firstName">الاسم</Label>
+              <Input id="create-firstName" name="firstName" required />
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="create-lastName">اللقب</Label>
+              <Input id="create-lastName" name="lastName" required />
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="create-fatherName">الأب</Label>
+              <Input id="create-fatherName" name="fatherName" />
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="create-motherName">الأم</Label>
+              <Input id="create-motherName" name="motherName" />
             </div>
             <div className="space-y-1">
               <Label htmlFor="create-classId">الصف</Label>
@@ -109,6 +131,30 @@ export function StudentCreateDialog({ classes, preserve, createStudentAction }: 
                 <option value="male">ذكر</option>
                 <option value="female">أنثى</option>
               </select>
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="create-birthPlace">مكان الولادة</Label>
+              <Input id="create-birthPlace" name="birthPlace" />
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="create-birthDate">تاريخ الولادة</Label>
+              <Input id="create-birthDate" name="birthDate" type="date" />
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="create-registryPlace">محل القيد</Label>
+              <Input id="create-registryPlace" name="registryPlace" />
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="create-registryDate">تاريخ القيد</Label>
+              <Input id="create-registryDate" name="registryDate" type="date" />
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="create-enrollmentDate">تاريخ الانتساب</Label>
+              <Input id="create-enrollmentDate" name="enrollmentDate" type="date" defaultValue={new Date().toISOString().slice(0, 10)} />
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="create-previousSchool">المدرسة السابقة</Label>
+              <Input id="create-previousSchool" name="previousSchool" />
             </div>
             <div className="space-y-1">
               <Label htmlFor="create-baseTuition">القسط الأساسي</Label>
@@ -190,8 +236,20 @@ export function StudentRowActions({
           <h3 className="text-base font-semibold">تعديل بيانات الطالب</h3>
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             <div className="space-y-1">
-              <Label htmlFor={`edit-fullName-${student.id}`}>الاسم الكامل</Label>
-              <Input id={`edit-fullName-${student.id}`} name="fullName" required defaultValue={student.fullName} />
+              <Label htmlFor={`edit-firstName-${student.id}`}>الاسم</Label>
+              <Input id={`edit-firstName-${student.id}`} name="firstName" required defaultValue={student.firstName} />
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor={`edit-lastName-${student.id}`}>اللقب</Label>
+              <Input id={`edit-lastName-${student.id}`} name="lastName" required defaultValue={student.lastName} />
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor={`edit-fatherName-${student.id}`}>الأب</Label>
+              <Input id={`edit-fatherName-${student.id}`} name="fatherName" defaultValue={student.fatherName ?? ""} />
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor={`edit-motherName-${student.id}`}>الأم</Label>
+              <Input id={`edit-motherName-${student.id}`} name="motherName" defaultValue={student.motherName ?? ""} />
             </div>
             <div className="space-y-1">
               <Label htmlFor={`edit-class-${student.id}`}>الصف</Label>
@@ -220,6 +278,35 @@ export function StudentRowActions({
                 <option value="male">ذكر</option>
                 <option value="female">أنثى</option>
               </select>
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor={`edit-birthPlace-${student.id}`}>مكان الولادة</Label>
+              <Input id={`edit-birthPlace-${student.id}`} name="birthPlace" defaultValue={student.birthPlace ?? ""} />
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor={`edit-birthDate-${student.id}`}>تاريخ الولادة</Label>
+              <Input id={`edit-birthDate-${student.id}`} name="birthDate" type="date" defaultValue={student.birthDate ?? ""} />
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor={`edit-registryPlace-${student.id}`}>محل القيد</Label>
+              <Input id={`edit-registryPlace-${student.id}`} name="registryPlace" defaultValue={student.registryPlace ?? ""} />
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor={`edit-registryDate-${student.id}`}>تاريخ القيد</Label>
+              <Input id={`edit-registryDate-${student.id}`} name="registryDate" type="date" defaultValue={student.registryDate ?? ""} />
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor={`edit-enrollmentDate-${student.id}`}>تاريخ الانتساب</Label>
+              <Input
+                id={`edit-enrollmentDate-${student.id}`}
+                name="enrollmentDate"
+                type="date"
+                defaultValue={student.enrollmentDate ?? ""}
+              />
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor={`edit-previousSchool-${student.id}`}>المدرسة السابقة</Label>
+              <Input id={`edit-previousSchool-${student.id}`} name="previousSchool" defaultValue={student.previousSchool ?? ""} />
             </div>
             <div className="space-y-1">
               <Label htmlFor={`edit-status-${student.id}`}>الحالة</Label>

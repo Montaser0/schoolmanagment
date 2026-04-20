@@ -1,4 +1,5 @@
 import { backfillAbsentForPastUnmarked, createStudent, deleteStudent, listStudents, updateStudent } from "@/actions/students";
+import Pagination from "@/components/component/Pagination";
 import { Button } from "@/components/ui/button";
 import { resolveSchoolId } from "@/lib/auth/resolve-school-id";
 import { createClient } from "@/lib/supabase/server";
@@ -8,7 +9,7 @@ import { DailyAttendanceCheckbox } from "./daily-attendance-checkbox";
 import { InstantStudentFilters } from "./instant-student-filters";
 import { StudentCreateDialog, StudentRowActions } from "./student-crud-actions";
 
-const STUDENT_PAGE_SIZE = 10;
+const STUDENT_PAGE_SIZE = 20;
 
 type StudentListPageProps = {
   searchParams?: Promise<{
@@ -282,10 +283,22 @@ export default async function StaffStudentListPage({ searchParams }: StudentList
     const preserveClassId = String(formData.get("preserveClassId") ?? "").trim();
     const preserveDate = String(formData.get("preserveDate") ?? "").trim();
     const preservePage = parsePageParam(String(formData.get("preservePage") ?? "1"));
+    const firstName = String(formData.get("firstName") ?? "").trim();
+    const lastName = String(formData.get("lastName") ?? "").trim();
     const result = await createStudent({
-      fullName: String(formData.get("fullName") ?? "").trim(),
+      firstName,
+      lastName,
+      fatherName: asNullableText(formData.get("fatherName")),
+      motherName: asNullableText(formData.get("motherName")),
+      fullName: `${firstName} ${lastName}`.trim(),
       classId: asNullableText(formData.get("classId")),
       gender: (String(formData.get("gender") ?? "male").trim() === "female" ? "female" : "male") as "male" | "female",
+      birthPlace: asNullableText(formData.get("birthPlace")),
+      birthDate: asNullableText(formData.get("birthDate")) ?? undefined,
+      registryPlace: asNullableText(formData.get("registryPlace")),
+      registryDate: asNullableText(formData.get("registryDate")) ?? undefined,
+      enrollmentDate: asNullableText(formData.get("enrollmentDate")) ?? undefined,
+      previousSchool: asNullableText(formData.get("previousSchool")),
       baseTuition: asNullableNumber(formData.get("baseTuition")),
       installmentDueDate: new Date().toISOString().slice(0, 10),
       guardianPhone: asNullableText(formData.get("guardianPhone")),
@@ -310,11 +323,23 @@ export default async function StaffStudentListPage({ searchParams }: StudentList
     const preserveClassId = String(formData.get("preserveClassId") ?? "").trim();
     const preserveDate = String(formData.get("preserveDate") ?? "").trim();
     const preservePage = parsePageParam(String(formData.get("preservePage") ?? "1"));
+    const firstName = String(formData.get("firstName") ?? "").trim();
+    const lastName = String(formData.get("lastName") ?? "").trim();
     const result = await updateStudent({
       id: String(formData.get("studentId") ?? "").trim(),
-      fullName: String(formData.get("fullName") ?? "").trim(),
+      firstName,
+      lastName,
+      fatherName: asNullableText(formData.get("fatherName")),
+      motherName: asNullableText(formData.get("motherName")),
+      fullName: `${firstName} ${lastName}`.trim(),
       classId: asNullableText(formData.get("classId")),
       gender: (String(formData.get("gender") ?? "male").trim() === "female" ? "female" : "male") as "male" | "female",
+      birthPlace: asNullableText(formData.get("birthPlace")),
+      birthDate: asNullableText(formData.get("birthDate")) ?? undefined,
+      registryPlace: asNullableText(formData.get("registryPlace")),
+      registryDate: asNullableText(formData.get("registryDate")) ?? undefined,
+      enrollmentDate: asNullableText(formData.get("enrollmentDate")) ?? undefined,
+      previousSchool: asNullableText(formData.get("previousSchool")),
       baseTuition: asNullableNumber(formData.get("baseTuition")),
       guardianPhone: asNullableText(formData.get("guardianPhone")),
       address: asNullableText(formData.get("address")),
@@ -397,46 +422,60 @@ export default async function StaffStudentListPage({ searchParams }: StudentList
             <table className="w-full min-w-[860px] border-collapse text-sm mt-4">
               <thead>
                 <tr className="border-b bg-white text-right text-gray-800">
-                  <th className="px-4 py-3 font-semibold text-center">الاسم الكامل</th>
+                  <th className="px-4 py-3 font-semibold text-center">المعرّف</th>
+                  <th className="px-4 py-3 font-semibold text-center">الاسم</th>
+                  <th className="hidden md:table-cell px-4 py-3 font-semibold text-center">اللقب</th>
+                  <th className="hidden lg:table-cell px-4 py-3 font-semibold text-center">الأب</th>
+                  <th className="hidden lg:table-cell px-4 py-3 font-semibold text-center">الأم</th>
                   <th className="hidden md:table-cell px-4 py-3 font-semibold text-center">الصف</th>
                   <th className="hidden md:table-cell px-4 py-3 font-semibold text-center">النوع</th>
+                  <th className="hidden xl:table-cell px-4 py-3 font-semibold text-center">مكان/تاريخ الولادة</th>
+                  <th className="hidden xl:table-cell px-4 py-3 font-semibold text-center">محل/تاريخ القيد</th>
+                  <th className="hidden xl:table-cell px-4 py-3 font-semibold text-center">تاريخ الانتساب</th>
+                  <th className="hidden xl:table-cell px-4 py-3 font-semibold text-center">المدرسة السابقة</th>
                   <th className="hidden lg:table-cell px-4 py-3 font-semibold text-center">القسط الأساسي</th>
-                  <th className="hidden lg:table-cell px-4 py-3 font-semibold text-center">هاتف ولي الأمر</th>
-                  <th className="hidden xl:table-cell px-4 py-3 font-semibold text-center">العنوان</th>
                   <th className="hidden md:table-cell px-4 py-3 font-semibold text-center">نسبة الحضور</th>
                   <th className="px-4 py-3 font-semibold text-center whitespace-nowrap">الحضور اليومي</th>
                   <th className="px-4 py-3 text-start font-semibold whitespace-nowrap">الاجراءات</th>
                 </tr>
               </thead>
               <tbody>
-                {studentsResult.students.map((student) => {
+                {studentsResult.students.map((student, index) => {
                   const isPresent = presentByStudent.get(student.id) === true;
                   const monthly = monthlyStatsByStudent.get(student.id);
-                  const studentIdLabel = student.id.slice(0, 8).toUpperCase();
                   const attendedDays = monthly?.presentDays ?? 0;
                   const fixedSchoolDays = 22;
                   const rate = Math.round((attendedDays / fixedSchoolDays) * 1000) / 10;
+                  const displayId = offset + index + 1;
                   return (
                     <tr key={student.id} className="hover:bg-slate-100 border-b even:bg-slate-50">
+                      <td className="px-4 py-3 text-center font-medium">{displayId}</td>
                       <td className="w-full md:w-auto flex flex-row gap-3 m-3">
                         <div className="flex size-10 items-center justify-center rounded-full bg-sky/20 text-sm font-bold text-sky-700 md:hidden xl:flex">
                           {student.fullName.slice(0, 1)}
                         </div>
                         <div className="flex flex-col">
-                          <h3 className="font-semibold text-gray-900">{student.fullName}</h3>
+                          <h3 className="font-semibold text-gray-900">{student.firstName}</h3>
                           <h4 className="text-xs text-gray-500">{student.className ?? "بدون صف"}</h4>
                         </div>
                       </td>
+                      <td className="hidden md:table-cell px-4 py-3 text-center">{student.lastName}</td>
+                      <td className="hidden lg:table-cell px-4 py-3 text-center">{student.fatherName ?? "—"}</td>
+                      <td className="hidden lg:table-cell px-4 py-3 text-center">{student.motherName ?? "—"}</td>
                       <td className="hidden md:table-cell px-4 py-3 text-center">{student.className ?? "—"}</td>
                       <td className="hidden md:table-cell px-4 py-3 text-center">
                         {student.gender === "male" ? "ذكر" : "أنثى"}
                       </td>
+                      <td className="hidden xl:table-cell px-4 py-3 text-center">
+                        {(student.birthPlace || student.birthDate) ? `${student.birthPlace ?? "—"} / ${student.birthDate ?? "—"}` : "—"}
+                      </td>
+                      <td className="hidden xl:table-cell px-4 py-3 text-center">
+                        {(student.registryPlace || student.registryDate) ? `${student.registryPlace ?? "—"} / ${student.registryDate ?? "—"}` : "—"}
+                      </td>
+                      <td className="hidden xl:table-cell px-4 py-3 text-center">{student.enrollmentDate ?? "—"}</td>
+                      <td className="hidden xl:table-cell px-4 py-3 text-center">{student.previousSchool ?? "—"}</td>
                       <td className="hidden lg:table-cell px-4 py-3 text-center">
                         ${student.baseTuition.toLocaleString("en-US")}
-                      </td>
-                      <td className="hidden lg:table-cell px-4 py-3 text-center">{student.guardianPhone ?? "—"}</td>
-                      <td className="hidden xl:table-cell px-4 py-3 text-center text-muted-foreground">
-                        {student.address ?? "—"}
                       </td>
                       <td className="hidden md:table-cell px-4 py-3 text-center">
                         <div className="font-semibold tabular-nums text-foreground">{rate.toLocaleString("en-US")}%</div>
@@ -456,9 +495,19 @@ export default async function StaffStudentListPage({ searchParams }: StudentList
                           <StudentRowActions
                             student={{
                               id: student.id,
+                              firstName: student.firstName,
+                              lastName: student.lastName,
+                              fatherName: student.fatherName,
+                              motherName: student.motherName,
                               fullName: student.fullName,
                               classId: student.classId,
                               gender: student.gender,
+                              birthPlace: student.birthPlace,
+                              birthDate: student.birthDate,
+                              registryPlace: student.registryPlace,
+                              registryDate: student.registryDate,
+                              enrollmentDate: student.enrollmentDate,
+                              previousSchool: student.previousSchool,
                               baseTuition: student.baseTuition,
                               guardianPhone: student.guardianPhone,
                               address: student.address,
@@ -479,49 +528,7 @@ export default async function StaffStudentListPage({ searchParams }: StudentList
           </div>
         )}
 
-        <div className="flex items-center justify-between text-gray-500 border-t border-white/10 px-4 py-3 sm:px-6">
-          {!studentsResult.success || page <= 1 || listTotal === 0 ? (
-            <Button type="button" className="py-2 px-4 rounded-md bg-slate-200 text-xs font-semibold" disabled>
-              السابق
-            </Button>
-          ) : (
-            <Button className="py-2 px-4 rounded-md bg-slate-200 text-xs font-semibold" asChild>
-              <Link
-                href={buildStudentListHref({
-                  q: query,
-                  classId,
-                  date: attendanceDate,
-                  page: page - 1,
-                })}
-              >
-                السابق
-              </Link>
-            </Button>
-          )}
-          <span className="tabular-nums text-muted-foreground text-xs">
-            {studentsResult.success
-              ? `صفحة ${page.toLocaleString("en-US")} من ${totalPages.toLocaleString("en-US")}`
-              : "—"}
-          </span>
-          {!studentsResult.success || page >= totalPages || listTotal === 0 ? (
-            <Button type="button" className="py-2 px-4 rounded-md bg-slate-200 text-xs font-semibold" disabled>
-              التالي
-            </Button>
-          ) : (
-            <Button className="py-2 px-4 rounded-md bg-slate-200 text-xs font-semibold" asChild>
-              <Link
-                href={buildStudentListHref({
-                  q: query,
-                  classId,
-                  date: attendanceDate,
-                  page: page + 1,
-                })}
-              >
-                التالي
-              </Link>
-            </Button>
-          )}
-        </div>
+        {studentsResult.success && listTotal > 0 ? <Pagination currentPage={page} totalPages={totalPages} /> : null}
       </section>
     </div>
   );

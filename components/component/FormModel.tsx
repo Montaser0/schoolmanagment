@@ -1,6 +1,6 @@
 "use client"
 import { useState } from 'react';
-import { Pencil, Plus, Trash2, X } from 'lucide-react';
+import Image from 'next/image';
 
 const FormModel = ({
     table,
@@ -33,7 +33,6 @@ const FormModel = ({
                 ? "bg-sky"
                 : "bg-purple";
     const [open, setOpen] = useState(false);
-    const ActionIcon = type === "create" ? Plus : type === "update" ? Pencil : Trash2;
 
     const Form = () => {
         if (type === "delete" && id) {
@@ -60,14 +59,24 @@ const FormModel = ({
         <button  className={`${size} flex items-center justify-center rounded-full ${bgColor}`}
         onClick={() => setOpen(true)}
         >
-            <ActionIcon size={16} aria-label='action-icon' />
+            <Image
+                src={`/${type}.png`}
+                alt='action-icon'
+                width={16}
+                height={16}
+            />
                 
              </button>
              {open && (
                 <div className='w-screen h-screen bg-black fixed bg-opacity-60 left-0 top-0 z-50 flex items-center justify-center'>
                     <div className='bg-white p-4 rounded-lg relative w-[60%] md:w-[70%] lg:w-[50%] xl:w-[50%] 2xl:w-[40%]'>
                         <button className='absolute top-4 right-4 cursor-pointer text-red-500' onClick={() => setOpen(false)}>
-                            <X size={17} aria-label='close' />
+                            <Image
+                                src={`/close.png`}
+                                alt='close'
+                                width={17}
+                                height={17}
+                            />
                         </button>
                         <Form />
                     </div>

@@ -19,9 +19,19 @@ type AuthContext =
 
 type StudentRow = {
   id: string;
+  first_name: string;
+  last_name: string;
+  father_name: string | null;
+  mother_name: string | null;
   full_name: string;
   class_id: string | null;
   gender: GenderType;
+  birth_place: string | null;
+  birth_date: string | null;
+  registry_place: string | null;
+  registry_date: string | null;
+  enrollment_date: string | null;
+  previous_school: string | null;
   base_tuition: number | string;
   guardian_phone: string | null;
   address: string | null;
@@ -48,9 +58,19 @@ type AttendanceRow = {
 };
 
 export type CreateStudentInput = {
-  fullName: string;
+  firstName: string;
+  lastName: string;
+  fatherName?: string | null;
+  motherName?: string | null;
+  fullName?: string;
   classId?: string | null;
   gender: GenderType;
+  birthPlace?: string | null;
+  birthDate?: string | null;
+  registryPlace?: string | null;
+  registryDate?: string | null;
+  enrollmentDate?: string | null;
+  previousSchool?: string | null;
   baseTuition?: number;
   /** عندما يكون القسط الأساسي أكبر من صفر يُنشأ تلقائياً صف في installments بهذا تاريخ الاستحقاق. */
   installmentDueDate?: string;
@@ -61,9 +81,19 @@ export type CreateStudentInput = {
 
 export type UpdateStudentInput = {
   id: string;
+  firstName?: string;
+  lastName?: string;
+  fatherName?: string | null;
+  motherName?: string | null;
   fullName?: string;
   classId?: string | null;
   gender?: GenderType;
+  birthPlace?: string | null;
+  birthDate?: string | null;
+  registryPlace?: string | null;
+  registryDate?: string | null;
+  enrollmentDate?: string | null;
+  previousSchool?: string | null;
   baseTuition?: number;
   guardianPhone?: string | null;
   address?: string | null;
@@ -117,10 +147,20 @@ export type StudentAttendanceFilter = {
 
 export type StudentListItem = {
   id: string;
+  firstName: string;
+  lastName: string;
+  fatherName: string | null;
+  motherName: string | null;
   fullName: string;
   classId: string | null;
   className: string | null;
   gender: GenderType;
+  birthPlace: string | null;
+  birthDate: string | null;
+  registryPlace: string | null;
+  registryDate: string | null;
+  enrollmentDate: string | null;
+  previousSchool: string | null;
   baseTuition: number;
   guardianPhone: string | null;
   address: string | null;
@@ -175,6 +215,15 @@ function normalizeNullableText(value?: string | null): string | null {
   if (value === undefined || value === null) return null;
   const trimmed = value.trim();
   return trimmed.length ? trimmed : null;
+}
+
+function normalizeDateText(value?: string | null): string | null {
+  const v = value?.trim();
+  if (!v) return null;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(v)) return null;
+  const d = new Date(`${v}T00:00:00Z`);
+  if (Number.isNaN(d.getTime())) return null;
+  return v.slice(0, 10);
 }
 
 function toPositiveAmount(value: number | undefined): number {
@@ -297,15 +346,29 @@ function installmentDueDateStringOrNull(value: string | undefined): string | nul
 }
 
 export async function createStudent(input: CreateStudentInput): Promise<ActionResult> {
-  const fullName = input.fullName?.trim();
+  const firstName = input.firstName?.trim();
+  const lastName = input.lastName?.trim();
+  const fullName = (input.fullName?.trim() || `${firstName ?? ""} ${lastName ?? ""}`.trim()).trim();
+  const fatherName = normalizeNullableText(input.fatherName);
+  const motherName = normalizeNullableText(input.motherName);
   const baseTuition = toPositiveAmount(input.baseTuition);
   const classId = normalizeNullableText(input.classId);
+  const birthPlace = normalizeNullableText(input.birthPlace);
+  const birthDate = normalizeDateText(input.birthDate);
+  const registryPlace = normalizeNullableText(input.registryPlace);
+  const registryDate = normalizeDateText(input.registryDate);
+  const enrollmentDate = normalizeDateText(input.enrollmentDate);
+  const previousSchool = normalizeNullableText(input.previousSchool);
   const guardianPhone = normalizeNullableText(input.guardianPhone);
   const address = normalizeNullableText(input.address);
   const status: StudentStatus = input.status ?? "active";
 
+  if (!firstName || !lastName) {
+    return { success: false, message: "الاسم واللقب مطلوبان." };
+  }
+
   if (!fullName) {
-    return { success: false, message: "اسم الطالب مطلوب." };
+    return { success: false, message: "الاسم الكامل غير صالح." };
   }
 
   if (baseTuition < 0) {
@@ -330,9 +393,19 @@ export async function createStudent(input: CreateStudentInput): Promise<ActionRe
     .from("students")
     .insert({
       school_id: auth.schoolId,
+      first_name: firstName,
+      last_name: lastName,
+      father_name: fatherName,
+      mother_name: motherName,
       full_name: fullName,
       class_id: classId,
       gender: input.gender,
+      birth_place: birthPlace,
+      birth_date: birthDate,
+      registry_place: registryPlace,
+      registry_date: registryDate,
+      enrollment_date: enrollmentDate,
+      previous_school: previousSchool,
       base_tuition: baseTuition,
       guardian_phone: guardianPhone,
       address,
@@ -382,6 +455,30 @@ export async function updateStudent(input: UpdateStudentInput): Promise<ActionRe
   }
 
   const updates: Record<string, unknown> = {};
+  let nextFirstName: string | undefined;
+  let nextLastName: string | undefined;
+
+  if (input.firstName !== undefined) {
+    const firstName = input.firstName.trim();
+    if (!firstName) return { success: false, message: "الاسم غير صالح." };
+    updates.first_name = firstName;
+    nextFirstName = firstName;
+  }
+
+  if (input.lastName !== undefined) {
+    const lastName = input.lastName.trim();
+    if (!lastName) return { success: false, message: "اللقب غير صالح." };
+    updates.last_name = lastName;
+    nextLastName = lastName;
+  }
+
+  if (input.fatherName !== undefined) {
+    updates.father_name = normalizeNullableText(input.fatherName);
+  }
+
+  if (input.motherName !== undefined) {
+    updates.mother_name = normalizeNullableText(input.motherName);
+  }
 
   if (input.fullName !== undefined) {
     const fullName = input.fullName.trim();
@@ -394,6 +491,25 @@ export async function updateStudent(input: UpdateStudentInput): Promise<ActionRe
   }
 
   if (input.gender !== undefined) updates.gender = input.gender;
+
+  if (input.birthPlace !== undefined) {
+    updates.birth_place = normalizeNullableText(input.birthPlace);
+  }
+  if (input.birthDate !== undefined) {
+    updates.birth_date = normalizeDateText(input.birthDate);
+  }
+  if (input.registryPlace !== undefined) {
+    updates.registry_place = normalizeNullableText(input.registryPlace);
+  }
+  if (input.registryDate !== undefined) {
+    updates.registry_date = normalizeDateText(input.registryDate);
+  }
+  if (input.enrollmentDate !== undefined) {
+    updates.enrollment_date = normalizeDateText(input.enrollmentDate);
+  }
+  if (input.previousSchool !== undefined) {
+    updates.previous_school = normalizeNullableText(input.previousSchool);
+  }
 
   if (input.baseTuition !== undefined) {
     const baseTuition = toPositiveAmount(input.baseTuition);
@@ -423,6 +539,26 @@ export async function updateStudent(input: UpdateStudentInput): Promise<ActionRe
   if (!auth.ok) return { success: false, message: auth.message };
 
   const supabase = await createClient();
+
+  if (input.fullName === undefined && (input.firstName !== undefined || input.lastName !== undefined)) {
+    const { data: currentRow, error: currentError } = await supabase
+      .from("students")
+      .select("first_name,last_name")
+      .eq("id", studentId)
+      .eq("school_id", auth.schoolId)
+      .maybeSingle();
+    if (currentError) {
+      return { success: false, message: currentError.message ?? "فشل قراءة بيانات الطالب الحالية." };
+    }
+    const mergedFirst = (nextFirstName ?? (currentRow?.first_name as string | undefined) ?? "").trim();
+    const mergedLast = (nextLastName ?? (currentRow?.last_name as string | undefined) ?? "").trim();
+    const mergedFullName = `${mergedFirst} ${mergedLast}`.trim();
+    if (!mergedFullName) {
+      return { success: false, message: "الاسم الكامل الناتج غير صالح." };
+    }
+    updates.full_name = mergedFullName;
+  }
+
   const { error } = await supabase
     .from("students")
     .update(updates)
@@ -472,7 +608,7 @@ export async function listStudents(filters: StudentFilters = {}): Promise<ListSt
   const supabase = await createClient();
 
   const selectColumns =
-    "id,full_name,class_id,gender,base_tuition,guardian_phone,address,status,created_at,classes!students_class_school_fk(name)";
+    "id,first_name,last_name,father_name,mother_name,full_name,class_id,gender,birth_place,birth_date,registry_place,registry_date,enrollment_date,previous_school,base_tuition,guardian_phone,address,status,created_at,classes!students_class_school_fk(name)";
 
   let countQuery = supabase
     .from("students")
@@ -501,7 +637,7 @@ export async function listStudents(filters: StudentFilters = {}): Promise<ListSt
 
   if (filters.query?.trim()) {
     const q = filters.query.trim();
-    const orFilter = `full_name.ilike.%${q}%,guardian_phone.ilike.%${q}%`;
+    const orFilter = `full_name.ilike.%${q}%,first_name.ilike.%${q}%,last_name.ilike.%${q}%,father_name.ilike.%${q}%,mother_name.ilike.%${q}%,guardian_phone.ilike.%${q}%`;
     countQuery = countQuery.or(orFilter);
     dataQuery = dataQuery.or(orFilter);
   }
@@ -652,10 +788,20 @@ export async function listStudents(filters: StudentFilters = {}): Promise<ListSt
 
     return {
       id: row.id,
+      firstName: row.first_name,
+      lastName: row.last_name,
+      fatherName: row.father_name,
+      motherName: row.mother_name,
       fullName: row.full_name,
       classId: row.class_id,
       className: classInfo?.name ?? null,
       gender: row.gender,
+      birthPlace: row.birth_place,
+      birthDate: row.birth_date,
+      registryPlace: row.registry_place,
+      registryDate: row.registry_date,
+      enrollmentDate: row.enrollment_date,
+      previousSchool: row.previous_school,
       baseTuition: toNumber(row.base_tuition),
       guardianPhone: row.guardian_phone,
       address: row.address,

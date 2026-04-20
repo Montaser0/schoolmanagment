@@ -69,8 +69,17 @@ export default async function StaffStudentsPage({ searchParams }: StudentsPagePr
 
   async function createStudentAction(formData: FormData) {
     "use server";
-    const fullName = String(formData.get("fullName") ?? "").trim();
+    const firstName = String(formData.get("firstName") ?? "").trim();
+    const lastName = String(formData.get("lastName") ?? "").trim();
+    const fatherName = asNullableText(formData.get("fatherName"));
+    const motherName = asNullableText(formData.get("motherName"));
     const selectedClassId = asNullableText(formData.get("classId"));
+    const birthPlace = asNullableText(formData.get("birthPlace"));
+    const birthDate = asNullableText(formData.get("birthDate"));
+    const registryPlace = asNullableText(formData.get("registryPlace"));
+    const registryDate = asNullableText(formData.get("registryDate"));
+    const enrollmentDate = asNullableText(formData.get("enrollmentDate"));
+    const previousSchool = asNullableText(formData.get("previousSchool"));
     const guardianPhone = asNullableText(formData.get("guardianPhone"));
     const address = asNullableText(formData.get("address"));
     const baseTuition = asNullableNumber(formData.get("baseTuition"));
@@ -78,9 +87,19 @@ export default async function StaffStudentsPage({ searchParams }: StudentsPagePr
     const statusValue = String(formData.get("status") ?? "active").trim() === "withdrawn" ? "withdrawn" : "active";
 
     const result = await createStudent({
-      fullName,
+      firstName,
+      lastName,
+      fatherName,
+      motherName,
+      fullName: `${firstName} ${lastName}`.trim(),
       classId: selectedClassId,
       gender: genderValue,
+      birthPlace,
+      birthDate: birthDate ?? undefined,
+      registryPlace,
+      registryDate: registryDate ?? undefined,
+      enrollmentDate: enrollmentDate ?? undefined,
+      previousSchool,
       baseTuition,
       installmentDueDate: new Date().toISOString().slice(0, 10),
       guardianPhone,
@@ -122,14 +141,26 @@ export default async function StaffStudentsPage({ searchParams }: StudentsPagePr
 
             {/* الاسم */}
             <div className="space-y-2">
-              <Label htmlFor="fullName">الاسم الكامل</Label>
-              <Input
-                id="fullName"
-                name="fullName"
-                required
-                placeholder="مثال: أحمد محمد"
-                className="rounded-xl focus:ring-2 focus:ring-yellow-400"
-              />
+              <Label htmlFor="firstName">الاسم</Label>
+              <Input id="firstName" name="firstName" required className="rounded-xl focus:ring-2 focus:ring-yellow-400" />
+            </div>
+
+            {/* اللقب */}
+            <div className="space-y-2">
+              <Label htmlFor="lastName">اللقب</Label>
+              <Input id="lastName" name="lastName" required className="rounded-xl focus:ring-2 focus:ring-yellow-400" />
+            </div>
+
+            {/* الأب */}
+            <div className="space-y-2">
+              <Label htmlFor="fatherName">الأب</Label>
+              <Input id="fatherName" name="fatherName" className="rounded-xl focus:ring-2 focus:ring-yellow-400" />
+            </div>
+
+            {/* الأم */}
+            <div className="space-y-2">
+              <Label htmlFor="motherName">الأم</Label>
+              <Input id="motherName" name="motherName" className="rounded-xl focus:ring-2 focus:ring-yellow-400" />
             </div>
 
             {/* الصف */}
@@ -150,6 +181,48 @@ export default async function StaffStudentsPage({ searchParams }: StudentsPagePr
             </div>
 
             {/* النوع */}
+            {/* مكان الولادة */}
+            <div className="space-y-2">
+              <Label htmlFor="birthPlace">مكان الولادة</Label>
+              <Input id="birthPlace" name="birthPlace" className="rounded-xl focus:ring-2 focus:ring-yellow-400" />
+            </div>
+
+            {/* تاريخ الولادة */}
+            <div className="space-y-2">
+              <Label htmlFor="birthDate">تاريخ الولادة</Label>
+              <Input id="birthDate" name="birthDate" type="date" className="rounded-xl focus:ring-2 focus:ring-yellow-400" />
+            </div>
+
+            {/* محل القيد */}
+            <div className="space-y-2">
+              <Label htmlFor="registryPlace">محل القيد</Label>
+              <Input id="registryPlace" name="registryPlace" className="rounded-xl focus:ring-2 focus:ring-yellow-400" />
+            </div>
+
+            {/* تاريخ القيد */}
+            <div className="space-y-2">
+              <Label htmlFor="registryDate">تاريخ القيد</Label>
+              <Input id="registryDate" name="registryDate" type="date" className="rounded-xl focus:ring-2 focus:ring-yellow-400" />
+            </div>
+
+            {/* الانتساب */}
+            <div className="space-y-2">
+              <Label htmlFor="enrollmentDate">تاريخ الانتساب للمدرسة</Label>
+              <Input
+                id="enrollmentDate"
+                name="enrollmentDate"
+                type="date"
+                defaultValue={new Date().toISOString().slice(0, 10)}
+                className="rounded-xl focus:ring-2 focus:ring-yellow-400"
+              />
+            </div>
+
+            {/* المدرسة السابقة */}
+            <div className="space-y-2">
+              <Label htmlFor="previousSchool">المدرسة التي انتقل منها</Label>
+              <Input id="previousSchool" name="previousSchool" className="rounded-xl focus:ring-2 focus:ring-yellow-400" />
+            </div>
+
             <div className="space-y-2">
               <Label htmlFor="gender">النوع</Label>
               <select
