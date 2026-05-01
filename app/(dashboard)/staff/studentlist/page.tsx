@@ -62,6 +62,16 @@ function asNullableNumber(value: FormDataEntryValue | null): number | undefined 
   return number;
 }
 
+function nextYearDateString(baseDateText?: string | null): string {
+  const fallback = new Date().toISOString().slice(0, 10);
+  const base = String(baseDateText ?? "").trim() || fallback;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(base)) return fallback;
+  const d = new Date(`${base}T00:00:00Z`);
+  if (Number.isNaN(d.getTime())) return fallback;
+  d.setUTCFullYear(d.getUTCFullYear() + 1);
+  return d.toISOString().slice(0, 10);
+}
+
 function parseDateParam(value: string | undefined): string {
   const raw = value?.trim();
   if (!raw) return new Date().toISOString().slice(0, 10);
@@ -285,6 +295,7 @@ export default async function StaffStudentListPage({ searchParams }: StudentList
     const preservePage = parsePageParam(String(formData.get("preservePage") ?? "1"));
     const firstName = String(formData.get("firstName") ?? "").trim();
     const lastName = String(formData.get("lastName") ?? "").trim();
+    const enrollmentDate = asNullableText(formData.get("enrollmentDate"));
     const result = await createStudent({
       firstName,
       lastName,
@@ -297,10 +308,10 @@ export default async function StaffStudentListPage({ searchParams }: StudentList
       birthDate: asNullableText(formData.get("birthDate")) ?? undefined,
       registryPlace: asNullableText(formData.get("registryPlace")),
       registryDate: asNullableText(formData.get("registryDate")) ?? undefined,
-      enrollmentDate: asNullableText(formData.get("enrollmentDate")) ?? undefined,
+      enrollmentDate: enrollmentDate ?? undefined,
       previousSchool: asNullableText(formData.get("previousSchool")),
       baseTuition: asNullableNumber(formData.get("baseTuition")),
-      installmentDueDate: new Date().toISOString().slice(0, 10),
+      installmentDueDate: nextYearDateString(enrollmentDate),
       guardianPhone: asNullableText(formData.get("guardianPhone")),
       address: asNullableText(formData.get("address")),
       status: String(formData.get("status") ?? "active").trim() === "withdrawn" ? "withdrawn" : "active",
@@ -424,7 +435,7 @@ export default async function StaffStudentListPage({ searchParams }: StudentList
                 <tr className="border-b bg-white text-right text-gray-800">
                   <th className="px-4 py-3 font-semibold text-center">الاسم</th>
                   <th className="px-4 py-3 font-semibold text-center">الصف</th>
-                  <th className="px-4 py-3 font-semibold text-center">القسط الأساسي</th>
+                  <th className="px-4 py-3 font-semibold text-center">القسط السنوي</th>
                   <th className="px-4 py-3 font-semibold text-center">نسبة الحضور</th>
                   <th className="px-4 py-3 font-semibold text-center whitespace-nowrap">الحضور اليومي</th>
                   <th className="px-4 py-3 text-start font-semibold whitespace-nowrap">الاجراءات</th>

@@ -190,10 +190,10 @@ export default async function StudentInstallmentsPage({ searchParams }: { search
       <div className="rounded-2xl bg-sky p-5 shadow-sm transition-shadow hover:shadow-md sm:p-6">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div className="min-w-0 space-y-2">
-            <h1 className="text-2xl font-semibold tracking-tight text-foreground">أقساط الطلاب والدفعات</h1>
+            <h1 className="text-2xl font-semibold tracking-tight text-foreground">الأقساط السنوية للطلاب والدفعات</h1>
             <p className="text-sm text-gray-600 leading-relaxed">
-              يُعرّف القسط الأول غالباً من «إضافة طالب»؛ من الجدول يمكنك إضافة أقساط أخرى، أو تعديل القسط، أو حذفه إن لم
-              تُسجَّل دفعات. تسجيل الدفعات من عمود «دفعة».
+              يُعرّف القسط السنوي الأول غالباً من «إضافة طالب»؛ من الجدول يمكنك إضافة أقساط سنوية جديدة، أو تعديل القسط
+              السنوي، أو حذفه إن لم تُسجَّل دفعات. تسجيل الدفعات من عمود «دفعة».
             </p>
             <p className="text-xs text-gray-600">
               <Link href="/staff/studentlist" className="font-medium text-foreground underline-offset-4 hover:underline">
@@ -265,15 +265,15 @@ export default async function StudentInstallmentsPage({ searchParams }: { search
 
       <section className="rounded-xl border border-muted-foreground/20 bg-muted/20 p-4 sm:p-5">
         <div className="mb-4 flex flex-col gap-1 sm:flex-row sm:items-baseline sm:justify-between">
-          <h2 className="text-lg font-semibold text-foreground">الأقساط</h2>
+          <h2 className="text-lg font-semibold text-foreground">الأقساط السنوية</h2>
           {listResult.success ? (
             <p className="text-xs text-muted-foreground">عدد السجلات: {lines.length}</p>
           ) : null}
         </div>
         {lines.length === 0 ? (
           <div className="rounded-xl border border-dashed border-muted-foreground/30 bg-background/40 p-8 text-center text-sm text-muted-foreground">
-            لا توجد أقساط مطابقة للتصفية. عرّف الطالب من «إضافة طالب» بقسط أساسي أكبر من صفر وتاريخ استحقاق ليظهر القسط
-            هنا.
+            لا توجد أقساط سنوية مطابقة للتصفية. عرّف الطالب من «إضافة طالب» بقسط سنوي أكبر من صفر وتاريخ استحقاق ليظهر
+            القسط هنا.
           </div>
         ) : (
           <div className="overflow-x-auto rounded-lg border border-border/60 bg-background/60">

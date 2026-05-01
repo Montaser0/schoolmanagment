@@ -159,7 +159,7 @@ export function StudentCreateDialog({ classes, preserve, createStudentAction }: 
               <Input id="create-previousSchool" name="previousSchool" />
             </div>
             <div className="space-y-1">
-              <Label htmlFor="create-baseTuition">القسط الأساسي</Label>
+              <Label htmlFor="create-baseTuition">القسط السنوي</Label>
               <Input id="create-baseTuition" name="baseTuition" type="number" min="0" step="0.01" defaultValue="0" />
             </div>
             <div className="space-y-1">
@@ -259,7 +259,7 @@ export function StudentRowActions({
             <div className="rounded-md border p-2"><span className="font-semibold">محل/تاريخ القيد:</span> {(student.registryPlace || student.registryDate) ? `${student.registryPlace ?? "—"} / ${student.registryDate ?? "—"}` : "—"}</div>
             <div className="rounded-md border p-2"><span className="font-semibold">تاريخ الانتساب:</span> {student.enrollmentDate ?? "—"}</div>
             <div className="rounded-md border p-2"><span className="font-semibold">المدرسة السابقة:</span> {student.previousSchool ?? "—"}</div>
-            <div className="rounded-md border p-2"><span className="font-semibold">القسط الأساسي:</span> ${student.baseTuition.toLocaleString("en-US")}</div>
+            <div className="rounded-md border p-2"><span className="font-semibold">القسط السنوي:</span> ${student.baseTuition.toLocaleString("en-US")}</div>
             <div className="rounded-md border p-2"><span className="font-semibold">هاتف ولي الأمر:</span> {student.guardianPhone ?? "—"}</div>
             <div className="rounded-md border p-2 md:col-span-2"><span className="font-semibold">العنوان:</span> {student.address ?? "—"}</div>
           </div>
@@ -366,7 +366,7 @@ export function StudentRowActions({
               </select>
             </div>
             <div className="space-y-1">
-              <Label htmlFor={`edit-tuition-${student.id}`}>القسط الأساسي</Label>
+              <Label htmlFor={`edit-tuition-${student.id}`}>القسط السنوي</Label>
               <Input
                 id={`edit-tuition-${student.id}`}
                 name="baseTuition"

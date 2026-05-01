@@ -61,7 +61,7 @@ export function InstallmentRowActions({
               editRef.current?.showModal();
             }}
           >
-            تعديل القسط
+            تعديل القسط السنوي
           </DropdownMenuItem>
           <DropdownMenuItem
             className="cursor-pointer"
@@ -70,7 +70,7 @@ export function InstallmentRowActions({
               addRef.current?.showModal();
             }}
           >
-            إضافة قسط جديد
+            إضافة قسط سنوي جديد
           </DropdownMenuItem>
           <DropdownMenuItem
             className="cursor-pointer text-destructive focus:text-destructive"
@@ -81,7 +81,7 @@ export function InstallmentRowActions({
               if (canDelete) delRef.current?.showModal();
             }}
           >
-            حذف القسط
+            حذف القسط السنوي
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
@@ -94,7 +94,7 @@ export function InstallmentRowActions({
           <input type="hidden" name="installmentId" value={installmentId} />
           <input type="hidden" name="preserveStatus" value={preserveStatus} />
           <input type="hidden" name="preserveClassId" value={preserveClassId} />
-          <h3 className="text-base font-semibold">تعديل القسط</h3>
+          <h3 className="text-base font-semibold">تعديل القسط السنوي</h3>
           <div className="space-y-1">
             <Label htmlFor={`due-${installmentId}`}>تاريخ الاستحقاق</Label>
             <Input
@@ -139,7 +139,7 @@ export function InstallmentRowActions({
           <input type="hidden" name="studentId" value={studentId} />
           <input type="hidden" name="preserveStatus" value={preserveStatus} />
           <input type="hidden" name="preserveClassId" value={preserveClassId} />
-          <h3 className="text-base font-semibold">قسط جديد لنفس الطالب</h3>
+          <h3 className="text-base font-semibold">قسط سنوي جديد لنفس الطالب</h3>
           <div className="space-y-1">
             <Label htmlFor={`new-due-${installmentId}`}>تاريخ الاستحقاق</Label>
             <Input id={`new-due-${installmentId}`} name="dueDate" type="date" required />
@@ -174,8 +174,8 @@ export function InstallmentRowActions({
           <input type="hidden" name="installmentId" value={installmentId} />
           <input type="hidden" name="preserveStatus" value={preserveStatus} />
           <input type="hidden" name="preserveClassId" value={preserveClassId} />
-          <h3 className="text-base font-semibold">حذف القسط</h3>
-          <p className="text-sm text-muted-foreground">هل تريد حذف هذا القسط نهائياً؟ لا يمكن التراجع.</p>
+          <h3 className="text-base font-semibold">حذف القسط السنوي</h3>
+          <p className="text-sm text-muted-foreground">هل تريد حذف هذا القسط السنوي نهائياً؟ لا يمكن التراجع.</p>
           <div className="flex justify-end gap-2 pt-1">
             <Button type="button" variant="outline" size="sm" onClick={() => delRef.current?.close()}>
               إلغاء

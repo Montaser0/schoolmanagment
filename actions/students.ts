@@ -72,7 +72,7 @@ export type CreateStudentInput = {
   enrollmentDate?: string | null;
   previousSchool?: string | null;
   baseTuition?: number;
-  /** عندما يكون القسط الأساسي أكبر من صفر يُنشأ تلقائياً صف في installments بهذا تاريخ الاستحقاق. */
+  /** عندما يكون القسط السنوي أكبر من صفر يُنشأ تلقائياً صف في installments بهذا تاريخ الاستحقاق السنوي. */
   installmentDueDate?: string;
   guardianPhone?: string | null;
   address?: string | null;
@@ -372,7 +372,7 @@ export async function createStudent(input: CreateStudentInput): Promise<ActionRe
   }
 
   if (baseTuition < 0) {
-    return { success: false, message: "قيمة القسط الأساسي غير صحيحة." };
+    return { success: false, message: "قيمة القسط السنوي غير صحيحة." };
   }
 
   const auth = await getAuthContext();
@@ -383,7 +383,7 @@ export async function createStudent(input: CreateStudentInput): Promise<ActionRe
     if (!due) {
       return {
         success: false,
-        message: "عند إدخال قسط أساسي أكبر من صفر يجب تحديد تاريخ استحقاق القسط الأول.",
+        message: "عند إدخال قسط سنوي أكبر من صفر يجب تحديد تاريخ استحقاق القسط السنوي الأول.",
       };
     }
   }
@@ -443,7 +443,7 @@ export async function createStudent(input: CreateStudentInput): Promise<ActionRe
     success: true,
     message:
       baseTuition > 0
-        ? "تمت إضافة الطالب وإنشاء قسطه الأول بنفس مبلغ القسط الأساسي."
+        ? "تمت إضافة الطالب وإنشاء قسطه السنوي الأول بنفس مبلغ القسط السنوي."
         : "تمت إضافة الطالب بنجاح.",
   };
 }
@@ -514,7 +514,7 @@ export async function updateStudent(input: UpdateStudentInput): Promise<ActionRe
   if (input.baseTuition !== undefined) {
     const baseTuition = toPositiveAmount(input.baseTuition);
     if (baseTuition < 0) {
-      return { success: false, message: "قيمة القسط الأساسي غير صحيحة." };
+      return { success: false, message: "قيمة القسط السنوي غير صحيحة." };
     }
     updates.base_tuition = baseTuition;
   }

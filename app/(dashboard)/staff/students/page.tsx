@@ -32,6 +32,16 @@ function asNullableNumber(value: FormDataEntryValue | null): number | undefined 
   return number;
 }
 
+function nextYearDateString(baseDateText?: string | null): string {
+  const fallback = new Date().toISOString().slice(0, 10);
+  const base = String(baseDateText ?? "").trim() || fallback;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(base)) return fallback;
+  const d = new Date(`${base}T00:00:00Z`);
+  if (Number.isNaN(d.getTime())) return fallback;
+  d.setUTCFullYear(d.getUTCFullYear() + 1);
+  return d.toISOString().slice(0, 10);
+}
+
 const selectClassName = cn(
   "flex h-10 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm shadow-sm transition-colors",
   "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
@@ -101,7 +111,7 @@ export default async function StaffStudentsPage({ searchParams }: StudentsPagePr
       enrollmentDate: enrollmentDate ?? undefined,
       previousSchool,
       baseTuition,
-      installmentDueDate: new Date().toISOString().slice(0, 10),
+      installmentDueDate: nextYearDateString(enrollmentDate),
       guardianPhone,
       address,
       status: statusValue,
@@ -238,7 +248,7 @@ export default async function StaffStudentsPage({ searchParams }: StudentsPagePr
 
             {/* القسط */}
             <div className="space-y-2">
-              <Label htmlFor="baseTuition">القسط الأساسي</Label>
+              <Label htmlFor="baseTuition">القسط السنوي</Label>
               <Input
                 id="baseTuition"
                 name="baseTuition"
