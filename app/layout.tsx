@@ -1,8 +1,6 @@
 import type { Metadata } from "next";
 import { IBM_Plex_Sans_Arabic } from "next/font/google";
-import RouteLoadingOverlay from "@/components/route-loading-overlay";
 import logo from "@/app/images/logo.png";
-import { Suspense } from "react";
 import "./globals.css";
 
 const defaultUrl = process.env.VERCEL_URL
@@ -34,9 +32,6 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning className={ibmPlexSansArabic.variable}>
       <body className="font-sans antialiased">
-        <Suspense fallback={null}>
-          <RouteLoadingOverlay />
-        </Suspense>
         {children}
       </body>
     </html>
