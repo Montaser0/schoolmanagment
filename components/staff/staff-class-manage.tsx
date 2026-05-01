@@ -61,16 +61,13 @@ export default function StaffClassManage({
   const studentsForActive = activeClass ? (studentsByClassId[activeClass.id] ?? []) : [];
 
   return (
-    <div className="flex flex-col gap-8" dir="rtl">
-      <div className="rounded-2xl bg-sky p-5 shadow-sm transition-shadow hover:shadow-md sm:p-6">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-          <div className="space-y-1">
-            <h1 className="text-2xl font-semibold tracking-tight text-foreground">إدارة الصفوف</h1>
-            <p className="text-sm text-gray-600">عرض الصفوف الحالية وإضافة صفوف جديدة لمدرستك.</p>
-          </div>
+    <div className="flex flex-col gap-4" dir="rtl">
+      <section className="bg-white rounded-md overflow-hidden">
+        <div className="flex items-center justify-between">
+          <h1 className="hidden md:block text-lg font-semibold mr-2">إدارة الصفوف</h1>
           <Button
             type="button"
-            className="shrink-0 gap-1.5 rounded-xl bg-Yellow text-foreground shadow-sm hover:bg-Yellow/90 hover:scale-[1.02] transition-transform"
+            className="shrink-0 gap-1.5 rounded-md bg-Yellow text-foreground shadow-sm hover:bg-Yellow/90 hover:scale-[1.02] transition-transform"
             onClick={() => setAddOpen(true)}
             disabled={!hasSchool}
             title={!hasSchool ? "لا توجد مدرسة مرتبطة بحسابك" : undefined}
@@ -79,7 +76,10 @@ export default function StaffClassManage({
             إضافة صف جديد
           </Button>
         </div>
-      </div>
+        <p className="text-xs text-muted-foreground mt-2 mb-2 mr-2">
+          عرض الصفوف الحالية وإضافة صفوف جديدة لمدرستك.
+        </p>
+      </section>
 
       {message ? (
         <div
@@ -93,31 +93,29 @@ export default function StaffClassManage({
         </div>
       ) : null}
 
-      <section className="rounded-xl border border-muted-foreground/20 bg-muted/20 p-4 sm:p-5">
-        <h2 className="mb-4 text-lg font-semibold text-foreground">الصفوف الحالية</h2>
+      <section className="bg-white rounded-md overflow-hidden">
+        <h2 className="mb-4 text-lg font-semibold text-foreground mr-2">الصفوف الحالية</h2>
         {!hasSchool ? (
           <p className="text-sm text-amber-800">لا توجد مدرسة مرتبطة بحسابك حاليا.</p>
         ) : classes.length > 0 ? (
-          <div className="overflow-x-auto rounded-lg border border-border/60 bg-background/60">
-            <table className="w-full min-w-[600px] border-collapse text-sm">
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[600px] border-collapse text-sm mt-4">
               <thead>
-                <tr className="border-b border-border bg-muted/40 text-right">
-                  <th className="px-4 py-3 font-medium">اسم الصف</th>
-                  <th className="px-4 py-3 font-medium">المرحلة</th>
-                  <th className="px-4 py-3 text-right font-medium whitespace-nowrap">إجراءات</th>
+                <tr className="border-b bg-white text-right text-gray-800">
+                  <th className="px-4 py-3 font-semibold text-center">اسم الصف</th>
+                  <th className="px-4 py-3 font-semibold text-center">المرحلة</th>
+                  <th className="px-4 py-3 text-start font-semibold whitespace-nowrap">الاجراءات</th>
                 </tr>
               </thead>
               <tbody>
                 {classes.map((classItem, index) => (
                   <tr
                     key={classItem.id}
-                    className={`border-b border-border/80 last:border-0 ${
-                      index % 2 === 0 ? "bg-background/40" : "bg-muted/10"
-                    }`}
+                    className={`hover:bg-slate-100 border-b ${index % 2 === 0 ? "bg-white" : "bg-slate-50"}`}
                   >
-                    <td className="px-4 py-3 font-medium">{classItem.name}</td>
-                    <td className="px-4 py-3 text-muted-foreground">{classItem.stage || "—"}</td>
-                    <td className="px-4 py-3 whitespace-nowrap text-right">
+                    <td className="px-4 py-3 text-center font-medium">{classItem.name}</td>
+                    <td className="px-4 py-3 text-center text-muted-foreground">{classItem.stage || "—"}</td>
+                    <td className="px-4 py-3 whitespace-nowrap">
                       <div className="flex flex-nowrap items-center justify-start gap-1.5">
                         <Button
                           type="button"

@@ -8,6 +8,7 @@ export default function RouteLoadingOverlay() {
   const searchParams = useSearchParams();
   const [isLoading, setIsLoading] = useState(false);
   const targetPathRef = useRef<string | null>(null);
+  const showDelayTimerRef = useRef<number | null>(null);
 
   useEffect(() => {
     const onDocumentClick = (event: MouseEvent) => {
@@ -24,13 +25,20 @@ export default function RouteLoadingOverlay() {
 
       const url = new URL(anchor.href, window.location.href);
       if (url.origin !== window.location.origin) return;
+      if (url.pathname.startsWith("/api/")) return;
 
       const nextPath = `${url.pathname}${url.search}`;
       const currentPath = `${window.location.pathname}${window.location.search}`;
       if (nextPath === currentPath) return;
 
       targetPathRef.current = nextPath;
-      setIsLoading(true);
+      if (showDelayTimerRef.current) {
+        window.clearTimeout(showDelayTimerRef.current);
+      }
+      showDelayTimerRef.current = window.setTimeout(() => {
+        setIsLoading(true);
+        showDelayTimerRef.current = null;
+      }, 140);
     };
 
     document.addEventListener("click", onDocumentClick, true);
@@ -40,21 +48,24 @@ export default function RouteLoadingOverlay() {
   }, []);
 
   useEffect(() => {
-    if (!isLoading) return;
     const currentPath = `${pathname}${searchParams.toString() ? `?${searchParams.toString()}` : ""}`;
     const targetPath = targetPathRef.current;
-    if (!targetPath) {
-      setIsLoading(false);
-      return;
-    }
-    if (currentPath === targetPath) {
+    if (targetPath && currentPath === targetPath) {
+      if (showDelayTimerRef.current) {
+        window.clearTimeout(showDelayTimerRef.current);
+        showDelayTimerRef.current = null;
+      }
       setIsLoading(false);
       targetPathRef.current = null;
     }
-  }, [pathname, searchParams, isLoading]);
+  }, [pathname, searchParams]);
 
   useEffect(() => {
     return () => {
+      if (showDelayTimerRef.current) {
+        window.clearTimeout(showDelayTimerRef.current);
+        showDelayTimerRef.current = null;
+      }
       targetPathRef.current = null;
     };
   }, []);

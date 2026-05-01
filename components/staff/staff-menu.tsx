@@ -49,6 +49,7 @@ export function StaffMenu({ roleLabel }: StaffMenuProps) {
             <Link
               key={item.href}
               href={item.href}
+              prefetch
               className="flex items-center justify-center lg:justify-start gap-3 text-gray-700 hover:bg-sky rounded-lg py-2 px-2 lg:px-3 transition-all duration-200 group"
             >
               <div className="p-1.5 rounded-lg bg-gray-50 group-hover:bg-sky transition-colors duration-200">

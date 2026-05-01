@@ -26,6 +26,9 @@ export default async function StaffClassPage({ searchParams }: ClassPageProps) {
   }
 
   const schoolId = await resolveSchoolId(supabase, user.id, user.email);
+  const { data: schoolRow } = schoolId
+    ? await supabase.from("schools").select("name").eq("id", schoolId).maybeSingle()
+    : { data: null };
 
   const [{ data: classes }, { data: studentRows }] = schoolId
     ? await Promise.all([
@@ -105,7 +108,8 @@ export default async function StaffClassPage({ searchParams }: ClassPageProps) {
   }
 
   return (
-    <div className="p-4 flex flex-col gap-8" dir="rtl">
+    <div className="bg-white p-4 rounded-md mt-4 max-w-6xl mx-auto" dir="rtl">
+      <p className="mb-2 text-xs text-muted-foreground">{(schoolRow as { name?: string } | null)?.name ?? "مدرستك"}</p>
       <StaffClassManage
         classes={classes ?? []}
         studentsByClassId={studentsByClassId}
