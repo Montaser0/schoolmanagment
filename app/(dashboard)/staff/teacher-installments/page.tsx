@@ -88,9 +88,14 @@ export default async function TeacherInstallmentsPage({ searchParams }: { search
     );
   }
 
-  const listResult = await listTeacherInstallmentLines({
-    paymentStatus: statusFilter,
-  });
+  const [{ data: schoolRow }, listResult] = await Promise.all([
+    supabase.from("schools").select("name").eq("id", schoolId).maybeSingle(),
+    listTeacherInstallmentLines({
+      paymentStatus: statusFilter,
+    }),
+  ]);
+
+  const schoolName = (schoolRow as { name?: string } | null)?.name ?? "مدرستك";
 
   const lines = listResult.success ? listResult.lines : [];
 
@@ -150,27 +155,8 @@ export default async function TeacherInstallmentsPage({ searchParams }: { search
   }
 
   return (
-    <div className="p-4 flex flex-col gap-8 min-w-0" dir="rtl">
-      <div className="rounded-2xl bg-sky p-5 shadow-sm transition-shadow hover:shadow-md sm:p-6">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-          <div className="min-w-0 space-y-2">
-            <h1 className="text-2xl font-semibold tracking-tight text-foreground">رواتب المعلمين — أقساط ودفعات</h1>
-            <p className="text-sm text-gray-600 leading-relaxed">
-              يُعرّف قسط الراتب الأول غالباً من «إضافة معلم» عند إدخال راتب أكبر من صفر؛ من الجدول يمكنك إضافة أقساط أخرى،
-              أو تعديل القسط، أو حذفه إن لم تُسجَّل دفعات. تسجيل صرف الراتب من عمود «دفعة».
-            </p>
-            <p className="text-xs text-gray-600">
-              <Link href="/staff/teacherslist" className="font-medium text-foreground underline-offset-4 hover:underline">
-                قائمة المعلمين
-              </Link>
-              <span className="mx-1.5 text-muted-foreground">·</span>
-              <Link href="/staff/addteachers" className="font-medium text-foreground underline-offset-4 hover:underline">
-                إضافة معلم
-              </Link>
-            </p>
-          </div>
-        </div>
-      </div>
+    <div className="bg-white p-4 rounded-md mt-4 max-w-6xl mx-auto" dir="rtl">
+      <p className="mb-2 text-xs text-muted-foreground">{schoolName}</p>
 
       {flash && flashType ? (
         <div
@@ -184,61 +170,64 @@ export default async function TeacherInstallmentsPage({ searchParams }: { search
         </div>
       ) : null}
 
-      {!listResult.success ? (
-        <div className="rounded-xl border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-900">
-          {listResult.message}
+      <section className="bg-white rounded-md overflow-hidden">
+        <div className="flex items-center justify-between">
+          <h1 className="hidden md:block text-lg font-semibold mr-2">رواتب المعلمين — أقساط ودفعات</h1>
+          <form action={applyFiltersAction} className="flex flex-col md:flex-row items-center gap-4 w-full md:w-auto">
+            <div className="flex flex-wrap items-end gap-3">
+              <div className="space-y-1">
+                <Label htmlFor="filterStatus" className="text-xs text-muted-foreground">
+                  حالة القسط
+                </Label>
+                <select id="filterStatus" name="status" defaultValue={statusFilter} className={`${selectClassName} h-10`}>
+                  {STATUS_OPTIONS.map((o) => (
+                    <option key={o.value} value={o.value}>
+                      {o.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <Button
+                type="submit"
+                className="h-10 rounded-md bg-Yellow px-4 text-foreground shadow-sm hover:bg-Yellow/90 hover:scale-[1.02] transition-transform"
+              >
+                تطبيق
+              </Button>
+            </div>
+          </form>
         </div>
-      ) : null}
 
-      <section className="rounded-xl border border-muted-foreground/20 bg-muted/20 p-4 sm:p-5">
-        <h2 className="mb-4 text-lg font-semibold text-foreground">تصفية العرض</h2>
-        <form action={applyFiltersAction} className="flex flex-wrap items-end gap-4">
-          <div className="space-y-2">
-            <Label htmlFor="filterStatus" className="text-muted-foreground">
-              حالة القسط
-            </Label>
-            <select id="filterStatus" name="status" defaultValue={statusFilter} className={selectClassName}>
-              {STATUS_OPTIONS.map((o) => (
-                <option key={o.value} value={o.value}>
-                  {o.label}
-                </option>
-              ))}
-            </select>
-          </div>
-          <Button
-            type="submit"
-            className="rounded-xl bg-Yellow px-4 text-foreground shadow-sm hover:bg-Yellow/90 hover:scale-[1.02] transition-transform"
-          >
-            تطبيق
-          </Button>
-        </form>
-      </section>
+        <p className="text-xs text-muted-foreground mt-2 mb-2 mr-2">
+          <Link href="/staff/teacherslist" className="font-medium text-foreground underline-offset-4 hover:underline">
+            قائمة المعلمين
+          </Link>
+          <span className="mx-1.5 text-muted-foreground">·</span>
+          <Link href="/staff/addteachers" className="font-medium text-foreground underline-offset-4 hover:underline">
+            إضافة معلم
+          </Link>
+          {listResult.success ? <span className="mr-3">عدد السجلات: {lines.length}</span> : null}
+        </p>
 
-      <section className="rounded-xl border border-muted-foreground/20 bg-muted/20 p-4 sm:p-5">
-        <div className="mb-4 flex flex-col gap-1 sm:flex-row sm:items-baseline sm:justify-between">
-          <h2 className="text-lg font-semibold text-foreground">أقساط الرواتب</h2>
-          {listResult.success ? (
-            <p className="text-xs text-muted-foreground">عدد السجلات: {lines.length}</p>
-          ) : null}
-        </div>
-        {lines.length === 0 ? (
-          <div className="rounded-xl border border-dashed border-muted-foreground/30 bg-background/40 p-8 text-center text-sm text-muted-foreground">
+        {!listResult.success ? <span className="text-sm text-red-700">{listResult.message}</span> : null}
+
+        {!listResult.success ? null : lines.length === 0 ? (
+          <p className="p-8 text-center text-sm text-muted-foreground">
             لا توجد أقساط مطابقة للتصفية. عرّف المعلم من «إضافة معلم» براتب أكبر من صفر وتاريخ استحقاق ليظهر القسط هنا،
             أو أضف قسطاً من إجراءات صف موجود.
-          </div>
+          </p>
         ) : (
-          <div className="overflow-x-auto rounded-lg border border-border/60 bg-background/60">
-            <table className="w-full border-collapse table-auto text-sm">
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[980px] border-collapse text-sm mt-4">
               <thead>
-                <tr className="border-b border-border bg-muted/40 text-right">
-                  <th className="px-2.5 py-2.5 font-medium">اسم المعلم</th>
-                  <th className="px-2.5 py-2.5 font-medium">المادة</th>
-                  <th className="px-2.5 py-2.5 font-medium">تاريخ الاستحقاق</th>
-                  <th className="px-2.5 py-2.5 font-medium">المبلغ</th>
-                  <th className="px-2.5 py-2.5 font-medium">المدفوع</th>
-                  <th className="px-2.5 py-2.5 font-medium">المتبقي</th>
-                  <th className="px-2.5 py-2.5 font-medium whitespace-nowrap w-[1%]">دفعة</th>
-                  <th className="px-2.5 py-2.5 font-medium whitespace-nowrap w-[1%] text-right">إجراءات</th>
+                <tr className="border-b bg-white text-right text-gray-800">
+                  <th className="px-4 py-3 font-semibold text-center">اسم المعلم</th>
+                  <th className="px-4 py-3 font-semibold text-center">المادة</th>
+                  <th className="px-4 py-3 font-semibold text-center">تاريخ الاستحقاق</th>
+                  <th className="px-4 py-3 font-semibold text-center">المبلغ</th>
+                  <th className="px-4 py-3 font-semibold text-center">المدفوع</th>
+                  <th className="px-4 py-3 font-semibold text-center">المتبقي</th>
+                  <th className="px-4 py-3 font-semibold text-center whitespace-nowrap">دفعة</th>
+                  <th className="px-4 py-3 font-semibold text-start whitespace-nowrap">الاجراءات</th>
                 </tr>
               </thead>
               <tbody>
@@ -247,17 +236,15 @@ export default async function TeacherInstallmentsPage({ searchParams }: { search
                   return (
                     <tr
                       key={line.installmentId}
-                      className={`border-b border-border/80 align-top last:border-0 ${
-                        index % 2 === 0 ? "bg-background/40" : "bg-muted/10"
-                      }`}
+                      className={`hover:bg-slate-100 border-b align-top ${index % 2 === 0 ? "bg-white" : "bg-slate-50"}`}
                     >
-                      <td className="px-2.5 py-2.5 font-medium">{line.teacherName}</td>
-                      <td className="px-2.5 py-2.5 text-muted-foreground">{line.subject ?? "—"}</td>
-                      <td className="px-2.5 py-2.5 whitespace-nowrap tabular-nums">{line.dueDate}</td>
-                      <td className="px-2.5 py-2.5 tabular-nums">${line.totalAmount.toLocaleString("en-US")}</td>
-                      <td className="px-2.5 py-2.5 tabular-nums">${line.totalPaid.toLocaleString("en-US")}</td>
-                      <td className="px-2.5 py-2.5 tabular-nums">${line.remaining.toLocaleString("en-US")}</td>
-                      <td className="px-2.5 py-2.5">
+                      <td className="px-4 py-3 text-center font-medium">{line.teacherName}</td>
+                      <td className="px-4 py-3 text-center text-muted-foreground">{line.subject ?? "—"}</td>
+                      <td className="px-4 py-3 text-center whitespace-nowrap tabular-nums">{line.dueDate}</td>
+                      <td className="px-4 py-3 text-center tabular-nums">${line.totalAmount.toLocaleString("en-US")}</td>
+                      <td className="px-4 py-3 text-center tabular-nums">${line.totalPaid.toLocaleString("en-US")}</td>
+                      <td className="px-4 py-3 text-center tabular-nums">${line.remaining.toLocaleString("en-US")}</td>
+                      <td className="px-4 py-3">
                         {canPay ? (
                           <form action={recordPaymentAction} className="flex items-center justify-end gap-1 whitespace-nowrap">
                             <input type="hidden" name="teacherId" value={line.teacherId} />
@@ -270,7 +257,7 @@ export default async function TeacherInstallmentsPage({ searchParams }: { search
                               step="0.01"
                               placeholder="المبلغ"
                               required
-                              className="h-8 w-[5.25rem] rounded-lg text-xs"
+                              className="h-8 w-[6rem] rounded-lg text-xs"
                             />
                             <Button type="submit" variant="outline" size="sm" className="h-8 shrink-0 text-xs">
                               تسجيل
@@ -280,7 +267,7 @@ export default async function TeacherInstallmentsPage({ searchParams }: { search
                           <span className="text-xs text-muted-foreground">—</span>
                         )}
                       </td>
-                      <td className="px-2.5 py-2.5 text-right">
+                      <td className="px-4 py-3">
                         <TeacherInstallmentRowActions
                           installmentId={line.installmentId}
                           teacherId={line.teacherId}

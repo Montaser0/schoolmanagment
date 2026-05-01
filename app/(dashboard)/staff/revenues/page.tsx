@@ -83,6 +83,8 @@ export default async function StaffRevenuesPage({ searchParams }: RevenuesPagePr
     getTotalRevenuesAmount(),
     getFinancialSummary(),
   ]);
+  const { data: schoolRow } = await supabase.from("schools").select("name").eq("id", schoolId).maybeSingle();
+  const schoolName = (schoolRow as { name?: string } | null)?.name ?? "مدرستك";
 
   const ledgerItems = ledgerResult.success ? ledgerResult.items : [];
 
@@ -172,7 +174,8 @@ export default async function StaffRevenuesPage({ searchParams }: RevenuesPagePr
   const defaultRevenueDate = new Date().toISOString().slice(0, 10);
 
   return (
-    <div className="p-4 flex flex-col gap-8 min-w-0" dir="rtl">
+    <div className="bg-white p-4 rounded-md mt-4 max-w-6xl mx-auto flex flex-col gap-8 min-w-0" dir="rtl">
+      <p className="mb-2 text-xs text-muted-foreground">{schoolName}</p>
    
 
       {pageMessage ? (
@@ -215,7 +218,7 @@ export default async function StaffRevenuesPage({ searchParams }: RevenuesPagePr
         </div>
       )}
 
-      <section className="rounded-xl border border-muted-foreground/20 bg-muted/20 p-4 sm:p-5">
+      <section className="bg-white rounded-md overflow-hidden">
         <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="min-w-0 space-y-1">
             <h2 className="text-lg font-semibold text-foreground">سجل الإيرادات</h2>
@@ -241,18 +244,18 @@ export default async function StaffRevenuesPage({ searchParams }: RevenuesPagePr
           </div>
         ) : (
           <div className="overflow-x-auto rounded-lg border border-border/60 bg-background/60">
-            <table className="w-full min-w-[640px] border-collapse text-sm">
-              <thead className="bg-muted/50 text-right">
-                <tr>
-                  <th className="px-4 py-3 font-medium text-foreground">التاريخ</th>
-                  <th className="px-4 py-3 font-medium text-foreground">النوع / العنوان</th>
-                  <th className="px-4 py-3 font-medium text-foreground">المبلغ</th>
-                  <th className="px-4 py-3 font-medium w-[1%] whitespace-nowrap text-foreground">إجراءات</th>
+            <table className="w-full min-w-[640px] border-collapse text-sm mt-4">
+              <thead>
+                <tr className="border-b bg-white text-right text-gray-800">
+                  <th className="px-4 py-3 font-semibold text-foreground">التاريخ</th>
+                  <th className="px-4 py-3 font-semibold text-foreground">النوع / العنوان</th>
+                  <th className="px-4 py-3 font-semibold text-foreground">المبلغ</th>
+                  <th className="px-4 py-3 font-semibold w-[1%] whitespace-nowrap text-foreground">إجراءات</th>
                 </tr>
               </thead>
               <tbody>
                 {ledgerItems.map((row) => (
-                  <tr key={row.ledgerKey} className="border-t border-border/60">
+                  <tr key={row.ledgerKey} className="hover:bg-slate-100 border-b even:bg-slate-50">
                     <td className="px-4 py-3 whitespace-nowrap">{row.revenueDate}</td>
                     <td className="px-4 py-3">
                       <div className="flex flex-wrap items-center gap-2">

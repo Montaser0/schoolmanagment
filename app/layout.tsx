@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { IBM_Plex_Sans_Arabic } from "next/font/google";
-import { ThemeProvider } from "next-themes";
+import RouteLoadingOverlay from "@/components/route-loading-overlay";
 import logo from "@/app/images/logo.png";
 import "./globals.css";
 
@@ -33,14 +33,8 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning className={ibmPlexSansArabic.variable}>
       <body className="font-sans antialiased">
-        <ThemeProvider
-          attribute="class"
-          defaultTheme="system"
-          enableSystem
-          disableTransitionOnChange
-        >
-          {children}
-        </ThemeProvider>
+        <RouteLoadingOverlay />
+        {children}
       </body>
     </html>
   );
